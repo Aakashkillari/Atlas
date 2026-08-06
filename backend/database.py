@@ -39,7 +39,18 @@ CREATE TABLE IF NOT EXISTS internships (
     stipend INTEGER NOT NULL,
     capacity INTEGER NOT NULL,
     verified INTEGER NOT NULL,            -- 0/1
-    description TEXT NOT NULL
+    description TEXT NOT NULL,
+    company_about TEXT NOT NULL DEFAULT '',
+    assessment_stages TEXT NOT NULL DEFAULT '[]'  -- JSON list
+);
+
+CREATE TABLE IF NOT EXISTS applications (
+    id INTEGER PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES students(id),
+    internship_id INTEGER NOT NULL REFERENCES internships(id),
+    applied_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Applied',
+    UNIQUE (student_id, internship_id)
 );
 
 CREATE TABLE IF NOT EXISTS allocations (
@@ -79,5 +90,6 @@ def row_to_student(row: sqlite3.Row) -> dict:
 def row_to_internship(row: sqlite3.Row) -> dict:
     d = dict(row)
     d["skills_required"] = json.loads(d["skills_required"])
+    d["assessment_stages"] = json.loads(d.get("assessment_stages") or "[]")
     d["verified"] = bool(d["verified"])
     return d

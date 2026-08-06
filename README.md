@@ -14,9 +14,17 @@
 | 3. Fairness-weighted scoring | 0.6·skill + 0.2·location + 0.2·sector, with an equity uplift for first-generation / tier-2-3 students (the brief's affirmative-action mandate) | `backend/matching/scoring.py` |
 | 4. Optimal allocation | Hungarian algorithm solves the whole pool at once — no first-come bias | `backend/matching/allocate.py` |
 
-Plus: **template-based explanations** for every match (`explain.py`), a **cold-start
-fallback** for thin profiles, **verified-employer badges**, and a searchable, paginated
-tricolor dashboard.
+Plus: **template-based explanations** with confidence detail ("strong on Python, gap on
+Cloud"), a **cold-start fallback** for thin profiles, **verified-employer badges**, a
+**More Details view** (company info, assessment stages), **Apply Now** with the scheme's
+3-application limit enforced, a **retrieval-based chatbot** answering from live internship
+data, a **Hindi/English toggle**, and a government-portal UI (Student Portal + Admin
+Console) matching the approved Claude design.
+
+Admin Console: national conversion funnel, live demo stats, fairness monitor
+(raw vs equity-adjusted scores per applicant category), student list showing which
+company each student was allocated to, internship listings with an add-new-internship
+form, and a Run Allocation Engine button.
 
 ## Run it
 

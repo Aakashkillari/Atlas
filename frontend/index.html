@@ -3,85 +3,369 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ATLAS — PM Internship Scheme Smart Allocation</title>
+<title>ATLAS | PM Internship Scheme Portal</title>
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-<header class="tricolor-header">
+<div class="tricolor-strip"><span class="ts-saffron"></span><span class="ts-white"></span><span class="ts-green"></span></div>
+
+<!-- utility bar -->
+<div class="utility-bar">
+  <div class="util-inner">
+    <div class="util-left">
+      <span data-i18n="govIndia">Government of India</span>
+      <span class="util-sep">|</span>
+      <a href="#main" data-i18n="skipMain">Skip to Main Content</a>
+      <span class="util-sep">|</span>
+      <span data-i18n="screenReader">Screen Reader Access</span>
+    </div>
+    <div class="util-right">
+      <button id="lang-hi" class="lang-btn">हिन्दी</button>
+      <span class="util-sep">|</span>
+      <button id="lang-en" class="lang-btn active">English</button>
+    </div>
+  </div>
+</div>
+
+<!-- header -->
+<header class="site-header">
   <div class="header-inner">
     <div class="brand">
-      <div class="chakra" aria-hidden="true"></div>
+      <div class="emblem" aria-hidden="true"></div>
       <div>
-        <h1>ATLAS</h1>
-        <p class="tagline">AI-Based Smart Allocation &middot; PM Internship Scheme &middot; SIH25033</p>
+        <div class="ministry"><span data-i18n="bharatSarkar">भारत सरकार</span> &middot; <span data-i18n="ministry">Ministry of Corporate Affairs</span></div>
+        <div class="site-title">ATLAS <span class="title-sub">| <span data-i18n="portalName">PM Internship Scheme Portal</span></span></div>
       </div>
     </div>
-    <nav class="tabs">
-      <button class="tab active" data-view="student">Student Portal</button>
-      <button class="tab" data-view="admin">Admin / Allocation</button>
-    </nav>
+    <div class="header-actions">
+      <div class="portal-toggle">
+        <button id="btn-student-portal" class="ptoggle active" data-i18n="studentPortal">Student Portal</button>
+        <button id="btn-admin-portal" class="ptoggle" data-i18n="adminConsole">Admin Console</button>
+      </div>
+      <span class="help-link" data-i18n="help">Help</span>
+    </div>
   </div>
-  <div class="flag-strip"><span class="saffron"></span><span class="white"></span><span class="green"></span></div>
+  <div class="header-rule"></div>
 </header>
 
-<main>
-  <!-- ============ STUDENT VIEW ============ -->
-  <section id="view-student" class="view active">
-    <div class="panel">
-      <h2>Browse Internships</h2>
-      <div class="search-row">
-        <input id="search-box" type="text" placeholder="Search by role, company, skill, or city&hellip;">
-        <button id="search-btn" class="btn btn-green">Search</button>
+<!-- nav -->
+<nav class="main-nav">
+  <div class="nav-inner">
+    <div id="nav-student" class="nav-set active">
+      <button class="nav-tab active" data-tab="dashboard" data-i18n="dashboard">Dashboard</button>
+      <button class="nav-tab" data-tab="explore" data-i18n="explore">Explore Internships</button>
+      <button class="nav-tab" data-tab="applications" data-i18n="myApplications">My Applications</button>
+      <button class="nav-tab" data-tab="profile" data-i18n="profile">Profile</button>
+    </div>
+    <div id="nav-admin" class="nav-set">
+      <button class="nav-tab active" data-tab="overview" data-i18n="overview">Overview</button>
+      <button class="nav-tab" data-tab="admin-students" data-i18n="students">Students</button>
+      <button class="nav-tab" data-tab="listings" data-i18n="listings">Listings</button>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+  <!-- ================= STUDENT: DASHBOARD ================= -->
+  <section id="tab-dashboard" class="tab-view active">
+    <div class="welcome-card">
+      <div class="welcome-left">
+        <div class="welcome-label" data-i18n="welcomeBack">WELCOME BACK</div>
+        <div class="welcome-name-row">
+          <select id="student-select" class="student-select"></select>
+          <span id="candidate-id" class="candidate-id"></span>
+        </div>
+        <div class="profile-progress">
+          <div class="progress-track"><div id="profile-bar" class="progress-fill"></div></div>
+          <span id="profile-pct" class="progress-label"></span>
+        </div>
       </div>
-      <div id="internship-list" class="card-grid"></div>
-      <div class="pager">
-        <button id="prev-page" class="btn btn-outline">&larr; Prev</button>
-        <span id="page-info"></span>
-        <button id="next-page" class="btn btn-outline">Next &rarr;</button>
+      <button class="btn btn-navy" data-goto="profile" data-i18n="completeProfile">Complete Profile &rarr;</button>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-tile border-navy">
+        <div class="stat-label" data-i18n="activeApplications">ACTIVE APPLICATIONS</div>
+        <div class="stat-value"><span id="stat-apps">0</span> <span class="stat-sub">/ 3 <span data-i18n="permitted">permitted</span></span></div>
+      </div>
+      <div class="stat-tile border-saffron">
+        <div class="stat-label" data-i18n="activeOffers">ACTIVE OFFERS</div>
+        <div class="stat-value">0 <span class="stat-sub">/ 2 <span data-i18n="permitted">permitted</span></span></div>
+      </div>
+      <div class="stat-tile border-green">
+        <div class="stat-label" data-i18n="offerWindow">OFFER RESPONSE WINDOW</div>
+        <div class="stat-value">14 <span class="stat-sub" data-i18n="daysLeft">days left</span></div>
       </div>
     </div>
 
-    <div class="panel">
-      <h2>My Recommendations</h2>
-      <p class="hint">Pick a demo student profile to see personalised, explained matches.</p>
-      <div class="search-row">
-        <select id="student-select"></select>
-        <button id="recommend-btn" class="btn btn-saffron">Get My Matches</button>
+    <div class="content-cols">
+      <div class="col-main">
+        <div class="section-head">
+          <h2 data-i18n="recommendedForYou">Recommended For You</h2>
+          <div class="filter-row">
+            <input id="rec-search" type="text" data-i18n-ph="searchPlaceholder" placeholder="Search by role, company or skill">
+            <select id="rec-sector"><option value="" data-i18n="allSectors">All Sectors</option></select>
+          </div>
+        </div>
+        <div id="cold-start-note"></div>
+        <div id="rec-list"></div>
       </div>
-      <div id="student-profile" class="profile-chip"></div>
-      <div id="recommendations"></div>
+      <aside class="col-side">
+        <div class="side-card">
+          <h3 data-i18n="applicationTimeline">Application Timeline</h3>
+          <div id="timeline" class="timeline"></div>
+        </div>
+        <div class="side-card">
+          <h3 data-i18n="howMatches">How ATLAS Matches You</h3>
+          <ol class="pipeline-list">
+            <li><strong data-i18n="p1t">Hard-Filter Gate</strong><span data-i18n="p1d">Removes candidate-internship pairs that fail eligibility, location or date constraints.</span></li>
+            <li><strong data-i18n="p2t">AI Matching Engine</strong><span data-i18n="p2d">Scores remaining pairs by semantic similarity of skills and preferences.</span></li>
+            <li><strong data-i18n="p3t">Fairness Weighting</strong><span data-i18n="p3d">Adjusts scores per the scheme's affirmative-action requirement.</span></li>
+            <li><strong data-i18n="p4t">Optimization</strong><span data-i18n="p4d">Allocates the full pool at once for the best overall fit, not first-come-first-served.</span></li>
+          </ol>
+        </div>
+        <div class="side-card roadmap-card">
+          <h3 data-i18n="comingSoon">Coming Soon</h3>
+          <div class="roadmap-chips">
+            <span class="roadmap-chip" data-i18n="gigWork">Gig Work</span>
+            <span class="roadmap-chip" data-i18n="studentNews">Student News</span>
+            <span class="roadmap-chip" data-i18n="hackathons">Hackathons</span>
+            <span class="roadmap-chip" data-i18n="schemes">Schemes</span>
+          </div>
+        </div>
+      </aside>
     </div>
   </section>
 
-  <!-- ============ ADMIN VIEW ============ -->
-  <section id="view-admin" class="view">
-    <div class="panel">
-      <div class="admin-head">
-        <h2>Allocation Engine</h2>
-        <button id="allocate-btn" class="btn btn-navy">&#9881; Run Smart Allocation</button>
+  <!-- ================= STUDENT: EXPLORE ================= -->
+  <section id="tab-explore" class="tab-view">
+    <div class="section-head">
+      <h2 data-i18n="exploreTitle">Explore Internships</h2>
+      <div class="filter-row">
+        <input id="explore-search" type="text" data-i18n-ph="searchPlaceholder" placeholder="Search by role, company or skill">
+        <button id="explore-btn" class="btn btn-navy" data-i18n="search">Search</button>
       </div>
-      <p class="hint">Pipeline: Hard-filter eligibility gate &rarr; Semantic skill matching &rarr;
-        Fairness-weighted scoring &rarr; Hungarian optimal allocation</p>
-      <div id="summary-cards" class="summary-grid"></div>
-      <div class="table-wrap">
-        <table id="allocation-table">
-          <thead>
-            <tr><th>Student</th><th>Internship</th><th>Company</th><th>Location</th>
-                <th>Skill</th><th>Loc</th><th>Sector</th><th>Equity</th><th>Total</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+    </div>
+    <div id="explore-list"></div>
+    <div class="pager">
+      <button id="explore-prev" class="page-btn">&larr;</button>
+      <span id="explore-pages" class="page-nums"></span>
+      <button id="explore-next" class="page-btn">&rarr;</button>
+    </div>
+  </section>
+
+  <!-- ================= STUDENT: MY APPLICATIONS ================= -->
+  <section id="tab-applications" class="tab-view">
+    <div class="section-head"><h2 data-i18n="myApplications">My Applications</h2></div>
+    <div id="applications-list"></div>
+  </section>
+
+  <!-- ================= STUDENT: PROFILE ================= -->
+  <section id="tab-profile" class="tab-view">
+    <div class="section-head"><h2 data-i18n="profileSetup">Profile Setup</h2></div>
+    <div class="panel-card">
+      <form id="profile-form" class="profile-grid">
+        <label><span data-i18n="fSkills">Skills (comma separated)</span>
+          <input id="f-skills" type="text" placeholder="Python, SQL, Excel"></label>
+        <label><span data-i18n="fQualification">Qualification</span>
+          <select id="f-qual">
+            <option value="12th Pass|1">12th Pass</option>
+            <option value="Diploma|2">Diploma</option>
+            <option value="BA|3">BA</option><option value="BCom|3">BCom</option>
+            <option value="BSc|3">BSc</option><option value="BBA|3">BBA</option>
+            <option value="BPharm|3">BPharm</option>
+            <option value="BTech CSE|3">BTech CSE</option>
+            <option value="BTech Mechanical|3">BTech Mechanical</option>
+            <option value="BTech Electrical|3">BTech Electrical</option>
+            <option value="MBA|4">MBA</option><option value="MTech|4">MTech</option>
+            <option value="MSc|4">MSc</option>
+          </select></label>
+        <label><span data-i18n="fLocations">Preferred locations (comma separated, or "Any")</span>
+          <input id="f-locations" type="text" placeholder="Pune, Mumbai"></label>
+        <label><span data-i18n="fSectors">Preferred sectors (comma separated)</span>
+          <input id="f-sectors" type="text" placeholder="IT & Software"></label>
+        <label><span data-i18n="fTier">College tier</span>
+          <select id="f-tier"><option value="1">Tier 1</option><option value="2">Tier 2</option><option value="3">Tier 3</option></select></label>
+        <label class="check-label"><input id="f-firstgen" type="checkbox">
+          <span data-i18n="fFirstGen">First-generation college student</span></label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-green" data-i18n="saveProfile">Save Profile</button>
+          <span id="profile-saved" class="saved-note"></span>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ================= ADMIN: OVERVIEW ================= -->
+  <section id="tab-overview" class="tab-view">
+    <div class="section-head">
+      <div>
+        <h2 data-i18n="nationalOverview">National Allocation Overview</h2>
+        <p class="sub-line" data-i18n="cycleLine">PM Internship Scheme &middot; Cycle 2026-27 &middot; Demo environment</p>
       </div>
-      <div id="match-detail" class="detail-box"></div>
+      <button id="run-allocation" class="btn btn-saffron" data-i18n="runAllocation">&#9881; Run Allocation Engine</button>
+    </div>
+
+    <div id="admin-stats" class="stat-row five"></div>
+
+    <div class="content-cols">
+      <div class="col-main">
+        <div class="panel-card">
+          <h3 data-i18n="funnelTitle">Conversion Funnel (National, 2025 data)</h3>
+          <p class="sub-line" data-i18n="funnelSub">Opportunity to Applied to Offered to Accepted to Joined</p>
+          <div id="funnel" class="funnel"></div>
+          <div class="warn-note" data-i18n="funnelWarn">Only 11.2% of postings convert to a joined intern. That conversion is the primary target of the allocation engine below.</div>
+        </div>
+        <div class="panel-card">
+          <h3 data-i18n="fairnessTitle">Fairness Monitor: Affirmative-Action Weighting</h3>
+          <p class="sub-line" data-i18n="fairnessSub">Average match score before vs after equity weighting, from the latest allocation run</p>
+          <div id="fairness-bars"></div>
+        </div>
+      </div>
+      <aside class="col-side">
+        <div class="side-card">
+          <h3 data-i18n="pipelineTitle">Allocation Engine Pipeline</h3>
+          <ol class="pipeline-list">
+            <li><strong data-i18n="p1t">Hard-Filter Gate</strong><span data-i18n="ap1d">Rule-based eligibility, capacity, location and date checks run before any scoring.</span></li>
+            <li><strong data-i18n="ap2t">Semantic Matching</strong><span data-i18n="ap2d">Vector similarity ranks candidate-internship fit by meaning, not keywords.</span></li>
+            <li><strong data-i18n="p3t">Fairness Weighting</strong><span data-i18n="ap3d">Equity weighting adjusts for first-generation and tier-2/3 college applicants per policy.</span></li>
+            <li><strong data-i18n="ap4t">Hungarian Optimization</strong><span data-i18n="ap4d">Solves the full pool simultaneously for a globally stable, high-quality allocation.</span></li>
+          </ol>
+        </div>
+        <div id="alloc-result" class="side-card" style="display:none">
+          <h3 data-i18n="lastRun">Latest Allocation Run</h3>
+          <div id="alloc-result-body"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ================= ADMIN: STUDENTS ================= -->
+  <section id="tab-admin-students" class="tab-view">
+    <div class="section-head">
+      <h2 data-i18n="studentsTitle">Students &amp; Allocations</h2>
+      <div class="filter-row">
+        <input id="students-search" type="text" data-i18n-ph="studentSearchPh" placeholder="Search by name, company or role">
+      </div>
+    </div>
+    <div class="panel-card table-card">
+      <table class="data-table">
+        <thead><tr>
+          <th data-i18n="thStudent">Student</th><th data-i18n="thQualification">Qualification</th>
+          <th data-i18n="thEquity">Equity</th><th data-i18n="thApplications">Applications</th>
+          <th data-i18n="thAllocatedTo">Allocated To</th><th data-i18n="thRole">Role</th>
+          <th data-i18n="thScore">Match</th>
+        </tr></thead>
+        <tbody id="students-tbody"></tbody>
+      </table>
+      <div class="pager">
+        <button id="students-prev" class="page-btn">&larr;</button>
+        <span id="students-pages" class="page-nums"></span>
+        <button id="students-next" class="page-btn">&rarr;</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ADMIN: LISTINGS ================= -->
+  <section id="tab-listings" class="tab-view">
+    <div class="section-head">
+      <h2 data-i18n="listingsTitle">Internship Listings</h2>
+      <div class="filter-row">
+        <input id="listings-search" type="text" data-i18n-ph="listingSearchPh" placeholder="Search by title, company">
+        <button id="add-job-toggle" class="btn btn-green" data-i18n="addInternship">+ Add New Internship</button>
+      </div>
+    </div>
+
+    <div id="add-job-panel" class="panel-card" style="display:none">
+      <h3 data-i18n="addInternship">+ Add New Internship</h3>
+      <form id="add-job-form" class="profile-grid">
+        <label><span data-i18n="jTitle">Role title</span><input id="j-title" required placeholder="Data Analyst Intern"></label>
+        <label><span data-i18n="jCompany">Company</span><input id="j-company" required placeholder="TCS"></label>
+        <label><span data-i18n="jSector">Sector</span>
+          <select id="j-sector">
+            <option>IT &amp; Software</option><option>Banking &amp; Finance</option>
+            <option>Manufacturing</option><option>Energy</option>
+            <option>Healthcare &amp; Pharma</option><option>Retail &amp; FMCG</option>
+          </select></label>
+        <label><span data-i18n="jLocation">City</span><input id="j-location" required placeholder="Pune"></label>
+        <label><span data-i18n="jState">State</span><input id="j-state" placeholder="Maharashtra"></label>
+        <label><span data-i18n="jSkills">Required skills (comma separated)</span><input id="j-skills" required placeholder="Python, SQL"></label>
+        <label><span data-i18n="jMinQual">Minimum qualification</span>
+          <select id="j-minqual"><option value="1">12th Pass</option><option value="2">Diploma</option><option value="3">Graduate</option><option value="4">Postgraduate</option></select></label>
+        <label><span data-i18n="jStipend">Stipend (Rs/month)</span><input id="j-stipend" type="number" value="5000"></label>
+        <label><span data-i18n="jCapacity">Capacity (seats)</span><input id="j-capacity" type="number" value="5"></label>
+        <label class="check-label"><input id="j-verified" type="checkbox"><span data-i18n="jVerified">Verified employer</span></label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-green" data-i18n="saveInternship">Save Internship</button>
+          <span id="job-saved" class="saved-note"></span>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel-card table-card">
+      <table class="data-table">
+        <thead><tr>
+          <th data-i18n="thPosting">Posting</th><th data-i18n="thEmployer">Employer</th>
+          <th data-i18n="thLocation">Location</th><th data-i18n="thCapacity">Capacity</th>
+          <th data-i18n="thVerification">Verification</th><th data-i18n="thStipend">Stipend</th>
+        </tr></thead>
+        <tbody id="listings-tbody"></tbody>
+      </table>
+      <div class="pager">
+        <button id="listings-prev" class="page-btn">&larr;</button>
+        <span id="listings-pages" class="page-nums"></span>
+        <button id="listings-next" class="page-btn">&rarr;</button>
+      </div>
     </div>
   </section>
 </main>
 
-<footer>
-  <div class="flag-strip"><span class="saffron"></span><span class="white"></span><span class="green"></span></div>
-  <p>ATLAS &mdash; built for Smart India Hackathon (SIH25033). Rules first, ranking second.</p>
+<!-- details modal -->
+<div id="modal-backdrop" class="modal-backdrop">
+  <div class="modal">
+    <button id="modal-close" class="modal-close">&times;</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- chatbot -->
+<button id="chat-fab" class="chat-fab" title="ATLAS Assistant">&#128172;</button>
+<div id="chat-panel" class="chat-panel">
+  <div class="chat-head">
+    <span data-i18n="chatTitle">ATLAS Assistant</span>
+    <button id="chat-close" class="chat-close">&times;</button>
+  </div>
+  <div id="chat-messages" class="chat-messages"></div>
+  <div class="chat-input-row">
+    <input id="chat-input" type="text" data-i18n-ph="chatPh" placeholder="Ask about internships, stipend, eligibility...">
+    <button id="chat-send" class="btn btn-navy" data-i18n="send">Send</button>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <h3 data-i18n="footerTitle">ATLAS Allocation Portal</h3>
+      <p data-i18n="footerDesc">An affirmative-action-aware, transparent matching system for the PM Internship Scheme. Content owned and maintained by the Ministry of Corporate Affairs, Government of India.</p>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="theScheme">The Scheme</h4>
+      <span data-i18n="aboutPmis">About PMIS</span><span data-i18n="eligibility">Eligibility</span><span data-i18n="guidelines">Guidelines</span>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="support">Support</h4>
+      <span data-i18n="grievance">Grievance Redressal</span><span>FAQs</span><span data-i18n="contactUs">Contact Us</span>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="legal">Legal</h4>
+      <span data-i18n="terms">Terms &amp; Conditions</span><span data-i18n="privacy">Privacy Policy</span><span>RTI</span>
+    </div>
+  </div>
+  <div class="footer-rule"></div>
+  <p class="footer-copy" data-i18n="copyright">&copy; 2026 Ministry of Corporate Affairs, Government of India. Best viewed in Chrome, Firefox, Safari &amp; Edge. Prototype build for SIH25033.</p>
 </footer>
 
+<script src="/static/i18n.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

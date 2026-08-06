@@ -22,10 +22,14 @@ def explain(student: dict, internship: dict, scores: dict) -> str:
         f"Limited direct skill overlap, but eligibility criteria are met",
     )]
 
-    matched = sorted(set(map(str.lower, student["skills"]))
-                     & set(map(str.lower, internship["skills_required"])))
+    student_sk = set(map(str.lower, student["skills"]))
+    required = {sk.lower(): sk for sk in internship["skills_required"]}
+    matched = sorted(sk for sk in required if sk in student_sk)
+    gaps = sorted(required[sk] for sk in required if sk not in student_sk)
     if matched:
-        parts.append(f"directly matching on {', '.join(matched[:3])}")
+        parts.append(f"strong on {', '.join(matched[:3])}")
+    if gaps:
+        parts.append(f"gap on {', '.join(gaps[:2])}")
 
     parts.append(_band(
         scores["location_score"],

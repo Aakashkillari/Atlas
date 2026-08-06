@@ -105,7 +105,21 @@ def make_students(n: int = 200) -> list[dict]:
     return students
 
 
-def make_internships(n: int = 50) -> list[dict]:
+ASSESSMENT_STAGES = [
+    ["Online Aptitude Test", "HR Interview"],
+    ["Resume Shortlist", "Technical Test", "Panel Interview"],
+    ["Profile Screening", "Group Discussion", "Final Interview"],
+    ["Online Test", "Technical Interview", "HR Round"],
+]
+
+COMPANY_ABOUT = {
+    "default": "{company} is a registered partner company under the PM Internship "
+               "Scheme, offering structured 12-month internships with mentorship, "
+               "on-the-job training and a monthly assistance of Rs 5,000.",
+}
+
+
+def make_internships(n: int = 120) -> list[dict]:
     internships = []
     for i in range(1, n + 1):
         sector = rng.choice(list(SECTORS))
@@ -130,6 +144,8 @@ def make_internships(n: int = 50) -> list[dict]:
             "description": f"{role} at {company}, {city}. Work on {', '.join(skills[:3])} "
                            f"under the PM Internship Scheme. 12-month engagement with "
                            f"monthly assistance of Rs 5,000.",
+            "company_about": COMPANY_ABOUT["default"].format(company=company),
+            "assessment_stages": rng.choice(ASSESSMENT_STAGES),
         })
     return internships
 
@@ -138,6 +154,7 @@ def seed() -> None:
     init_db()
     with get_conn() as conn:
         conn.execute("DELETE FROM allocations")
+        conn.execute("DELETE FROM applications")
         conn.execute("DELETE FROM students")
         conn.execute("DELETE FROM internships")
         for s in make_students():
@@ -151,13 +168,14 @@ def seed() -> None:
             )
         for j in make_internships():
             conn.execute(
-                "INSERT INTO internships VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO internships VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (j["id"], j["title"], j["company"], j["sector"], j["location"],
                  j["state"], json.dumps(j["skills_required"]),
                  j["min_qualification_level"], j["duration_months"], j["stipend"],
-                 j["capacity"], j["verified"], j["description"]),
+                 j["capacity"], j["verified"], j["description"],
+                 j["company_about"], json.dumps(j["assessment_stages"])),
             )
-    print("Seeded 200 students and 50 internships.")
+    print("Seeded 200 students and 120 internships.")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,14 @@
 """ATLAS API — FastAPI backend serving the matching engine and the dashboard."""
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
+import chatbot
 from database import get_conn, init_db, row_to_internship, row_to_student
 from matching import engine
 
@@ -67,6 +70,32 @@ def get_student(student_id: int):
     return row_to_student(row)
 
 
+class ProfileUpdate(BaseModel):
+    skills: list[str]
+    qualification: str
+    qualification_level: int
+    preferred_locations: list[str]
+    preferred_sectors: list[str]
+    first_generation: bool
+    college_tier: int
+
+
+@app.put("/api/students/{student_id}")
+def update_student(student_id: int, item: ProfileUpdate):
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE students SET skills=?, qualification=?, qualification_level=?,"
+            " preferred_locations=?, preferred_sectors=?, first_generation=?,"
+            " college_tier=? WHERE id=?",
+            (json.dumps(item.skills), item.qualification, item.qualification_level,
+             json.dumps(item.preferred_locations), json.dumps(item.preferred_sectors),
+             int(item.first_generation), item.college_tier, student_id))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Student not found")
+        row = conn.execute("SELECT * FROM students WHERE id=?", (student_id,)).fetchone()
+    return row_to_student(row)
+
+
 @app.get("/api/students/{student_id}/recommendations")
 def get_recommendations(student_id: int, top_n: int = Query(5, ge=1, le=20)):
     students = load_students()
@@ -79,6 +108,146 @@ def get_recommendations(student_id: int, top_n: int = Query(5, ge=1, le=20)):
     for rec in result["recommendations"]:
         rec["internship"] = j_by_id[rec["internship_id"]]
     return result
+
+
+class NewInternship(BaseModel):
+    title: str
+    company: str
+    sector: str
+    location: str
+    state: str = ""
+    skills_required: list[str]
+    min_qualification_level: int = 1
+    duration_months: int = 12
+    stipend: int = 5000
+    capacity: int = 5
+    verified: bool = False
+    description: str = ""
+    company_about: str = ""
+    assessment_stages: list[str] = []
+
+
+@app.post("/api/internships")
+def add_internship(item: NewInternship):
+    desc = item.description or (
+        f"{item.title} at {item.company}, {item.location}. Work on "
+        f"{', '.join(item.skills_required[:3])} under the PM Internship Scheme.")
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO internships (title, company, sector, location, state,"
+            " skills_required, min_qualification_level, duration_months, stipend,"
+            " capacity, verified, description, company_about, assessment_stages)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (item.title, item.company, item.sector, item.location,
+             item.state or item.location, json.dumps(item.skills_required),
+             item.min_qualification_level, item.duration_months, item.stipend,
+             item.capacity, int(item.verified), desc,
+             item.company_about, json.dumps(item.assessment_stages)),
+        )
+        row = conn.execute("SELECT * FROM internships WHERE id=?",
+                           (cur.lastrowid,)).fetchone()
+    return row_to_internship(row)
+
+
+class Application(BaseModel):
+    student_id: int
+    internship_id: int
+
+
+@app.post("/api/apply")
+def apply(item: Application):
+    with get_conn() as conn:
+        active = conn.execute(
+            "SELECT COUNT(*) FROM applications WHERE student_id=?",
+            (item.student_id,)).fetchone()[0]
+        if active >= 3:
+            raise HTTPException(400, "Application limit reached: a candidate may "
+                                     "hold at most 3 active applications.")
+        existing = conn.execute(
+            "SELECT id FROM applications WHERE student_id=? AND internship_id=?",
+            (item.student_id, item.internship_id)).fetchone()
+        if existing:
+            raise HTTPException(400, "Already applied to this internship.")
+        conn.execute(
+            "INSERT INTO applications (student_id, internship_id, applied_at, status)"
+            " VALUES (?,?,?,?)",
+            (item.student_id, item.internship_id,
+             datetime.now(timezone.utc).isoformat(), "Applied"))
+    return {"ok": True}
+
+
+@app.get("/api/students/{student_id}/applications")
+def list_applications(student_id: int):
+    internships = {j["id"]: j for j in load_internships()}
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM applications WHERE student_id=? ORDER BY applied_at DESC",
+            (student_id,)).fetchall()
+    return [{**dict(r), "internship": internships.get(r["internship_id"])}
+            for r in rows]
+
+
+@app.get("/api/admin/students")
+def admin_students(search: str = "", page: int = Query(1, ge=1),
+                   page_size: int = Query(20, ge=1, le=250)):
+    """Students with their allocation result (which company they were matched to)."""
+    students = load_students()
+    internships = {j["id"]: j for j in load_internships()}
+    with get_conn() as conn:
+        alloc = {r["student_id"]: dict(r) for r in
+                 conn.execute("SELECT * FROM allocations")}
+        app_counts = {r["student_id"]: r["n"] for r in conn.execute(
+            "SELECT student_id, COUNT(*) AS n FROM applications GROUP BY student_id")}
+    rows = []
+    for s in students:
+        a = alloc.get(s["id"])
+        j = internships.get(a["internship_id"]) if a else None
+        rows.append({
+            "id": s["id"], "name": s["name"], "qualification": s["qualification"],
+            "skills": s["skills"], "home_state": s["home_state"],
+            "first_generation": s["first_generation"],
+            "college_tier": s["college_tier"],
+            "applications": app_counts.get(s["id"], 0),
+            "allocated": bool(a),
+            "allocated_company": j["company"] if j else None,
+            "allocated_role": j["title"] if j else None,
+            "allocated_location": j["location"] if j else None,
+            "match_score": a["total_score"] if a else None,
+        })
+    if search:
+        q = search.lower()
+        rows = [r for r in rows if q in r["name"].lower()
+                or (r["allocated_company"] or "").lower().find(q) >= 0
+                or (r["allocated_role"] or "").lower().find(q) >= 0]
+    total = len(rows)
+    start = (page - 1) * page_size
+    return {"total": total, "page": page, "page_size": page_size,
+            "items": rows[start:start + page_size]}
+
+
+@app.get("/api/admin/stats")
+def admin_stats():
+    with get_conn() as conn:
+        n_students = conn.execute("SELECT COUNT(*) FROM students").fetchone()[0]
+        n_internships = conn.execute("SELECT COUNT(*) FROM internships").fetchone()[0]
+        n_capacity = conn.execute(
+            "SELECT COALESCE(SUM(capacity),0) FROM internships").fetchone()[0]
+        n_applications = conn.execute("SELECT COUNT(*) FROM applications").fetchone()[0]
+        n_allocated = conn.execute("SELECT COUNT(*) FROM allocations").fetchone()[0]
+        n_verified = conn.execute(
+            "SELECT COUNT(*) FROM internships WHERE verified=1").fetchone()[0]
+    return {"students": n_students, "internships": n_internships,
+            "capacity": n_capacity, "applications": n_applications,
+            "allocated": n_allocated, "verified_internships": n_verified}
+
+
+class ChatQuery(BaseModel):
+    message: str
+
+
+@app.post("/api/chat")
+def chat(item: ChatQuery):
+    return chatbot.answer(item.message, load_internships())
 
 
 @app.post("/api/allocate")
