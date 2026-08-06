@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATLAS — PM Internship Scheme Smart Allocation</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="tricolor-header">
+  <div class="header-inner">
+    <div class="brand">
+      <div class="chakra" aria-hidden="true"></div>
+      <div>
+        <h1>ATLAS</h1>
+        <p class="tagline">AI-Based Smart Allocation &middot; PM Internship Scheme &middot; SIH25033</p>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-view="student">Student Portal</button>
+      <button class="tab" data-view="admin">Admin / Allocation</button>
+    </nav>
+  </div>
+  <div class="flag-strip"><span class="saffron"></span><span class="white"></span><span class="green"></span></div>
+</header>
+
+<main>
+  <!-- ============ STUDENT VIEW ============ -->
+  <section id="view-student" class="view active">
+    <div class="panel">
+      <h2>Browse Internships</h2>
+      <div class="search-row">
+        <input id="search-box" type="text" placeholder="Search by role, company, skill, or city&hellip;">
+        <button id="search-btn" class="btn btn-green">Search</button>
+      </div>
+      <div id="internship-list" class="card-grid"></div>
+      <div class="pager">
+        <button id="prev-page" class="btn btn-outline">&larr; Prev</button>
+        <span id="page-info"></span>
+        <button id="next-page" class="btn btn-outline">Next &rarr;</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>My Recommendations</h2>
+      <p class="hint">Pick a demo student profile to see personalised, explained matches.</p>
+      <div class="search-row">
+        <select id="student-select"></select>
+        <button id="recommend-btn" class="btn btn-saffron">Get My Matches</button>
+      </div>
+      <div id="student-profile" class="profile-chip"></div>
+      <div id="recommendations"></div>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN VIEW ============ -->
+  <section id="view-admin" class="view">
+    <div class="panel">
+      <div class="admin-head">
+        <h2>Allocation Engine</h2>
+        <button id="allocate-btn" class="btn btn-navy">&#9881; Run Smart Allocation</button>
+      </div>
+      <p class="hint">Pipeline: Hard-filter eligibility gate &rarr; Semantic skill matching &rarr;
+        Fairness-weighted scoring &rarr; Hungarian optimal allocation</p>
+      <div id="summary-cards" class="summary-grid"></div>
+      <div class="table-wrap">
+        <table id="allocation-table">
+          <thead>
+            <tr><th>Student</th><th>Internship</th><th>Company</th><th>Location</th>
+                <th>Skill</th><th>Loc</th><th>Sector</th><th>Equity</th><th>Total</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="match-detail" class="detail-box"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="flag-strip"><span class="saffron"></span><span class="white"></span><span class="green"></span></div>
+  <p>ATLAS &mdash; built for Smart India Hackathon (SIH25033). Rules first, ranking second.</p>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

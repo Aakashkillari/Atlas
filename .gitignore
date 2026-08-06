@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+atlas.db
+.venv/
+venv/
+.env
