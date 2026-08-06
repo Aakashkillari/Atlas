@@ -60,6 +60,7 @@
     <div id="nav-admin" class="nav-set">
       <button class="nav-tab active" data-tab="overview" data-i18n="overview">Overview</button>
       <button class="nav-tab" data-tab="admin-students" data-i18n="students">Students</button>
+      <button class="nav-tab" data-tab="admin-apps" data-i18n="applications">Applications</button>
       <button class="nav-tab" data-tab="listings" data-i18n="listings">Listings</button>
     </div>
   </div>
@@ -283,6 +284,26 @@
         <span id="students-pages" class="page-nums"></span>
         <button id="students-next" class="page-btn">&rarr;</button>
       </div>
+    </div>
+  </section>
+
+  <!-- ================= ADMIN: APPLICATIONS ================= -->
+  <section id="tab-admin-apps" class="tab-view">
+    <div class="section-head">
+      <div>
+        <h2 data-i18n="appsTitle">Applications &amp; Offers</h2>
+        <p class="sub-line" data-i18n="appsSub">Companies review applications here: shortlist candidates, send offers, and track acceptance. Students accept or decline from their portal.</p>
+      </div>
+    </div>
+    <div class="panel-card table-card">
+      <table class="data-table">
+        <thead><tr>
+          <th data-i18n="thStudent">Student</th><th data-i18n="thRole">Role</th>
+          <th data-i18n="thEmployer">Employer</th><th data-i18n="thApplied">Applied</th>
+          <th data-i18n="thStatus">Status</th><th data-i18n="thActions">Actions</th>
+        </tr></thead>
+        <tbody id="admin-apps-tbody"></tbody>
+      </table>
     </div>
   </section>
 

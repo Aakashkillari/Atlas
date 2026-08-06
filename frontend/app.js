@@ -11,7 +11,12 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
 let currentStudent = null;
 let internshipCache = {};
 let authToken = localStorage.getItem("atlas_token") || "";
+let adminToken = localStorage.getItem("atlas_admin_token") || "";
 let demoMode = false;
+const adminApi = (path, opts = {}) => api(path, {
+  ...opts,
+  headers: { ...(opts.headers || {}), Authorization: "Bearer " + adminToken },
+});
 
 /* ================= authentication ================= */
 let authMode = "login";
@@ -21,8 +26,11 @@ function setAuthMode(mode) {
   authMode = mode;
   $("#auth-name-row").style.display = mode === "signup" ? "flex" : "none";
   $("#auth-name").required = mode === "signup";
-  $("#auth-title").textContent = mode === "signup" ? "Create Student Account" : "Student Sign In";
+  $("#auth-title").textContent = mode === "signup" ? "Create Student Account"
+    : mode === "admin" ? "Admin Sign In" : "Student Sign In";
   $("#auth-submit").textContent = mode === "signup" ? "Create Account" : "Sign In";
+  $("#auth-mode-toggle").style.display = mode === "admin" ? "none" : "";
+  $("#auth-demo").style.display = mode === "admin" ? "none" : "";
   $("#auth-mode-toggle").textContent = mode === "signup"
     ? "Already registered? Sign in" : "New here? Create an account";
   $("#auth-error").textContent = "";
@@ -40,6 +48,15 @@ $("#auth-form").addEventListener("submit", async (e) => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    if (res.admin) {
+      if (authMode !== "admin") { $("#auth-error").textContent = "Use the Admin Console button to sign in as admin."; return; }
+      adminToken = res.token;
+      localStorage.setItem("atlas_admin_token", adminToken);
+      hideAuth();
+      switchPortal("admin");
+      return;
+    }
+    if (authMode === "admin") { $("#auth-error").textContent = "Invalid admin credentials."; return; }
     authToken = res.token;
     localStorage.setItem("atlas_token", authToken);
     demoMode = false;
@@ -47,6 +64,12 @@ $("#auth-form").addEventListener("submit", async (e) => {
     enterSignedIn(res.student);
     if (authMode === "signup") switchTab("student", "profile");
   } catch (err) { $("#auth-error").textContent = err.message; }
+});
+$("#auth-backdrop").addEventListener("click", (e) => {
+  if (e.target === $("#auth-backdrop") && authMode === "admin") {
+    hideAuth(); setAuthMode("login");
+    if (!currentStudent) showAuth();
+  }
 });
 $("#auth-demo").addEventListener("click", async () => {
   demoMode = true;
@@ -86,13 +109,16 @@ async function initSession() {
 
 /* ================= portal + tab switching ================= */
 function switchPortal(portal) {
+  if (portal === "admin" && !adminToken) { setAuthMode("admin"); showAuth(); return; }
   $("#btn-student-portal").classList.toggle("active", portal === "student");
   $("#btn-admin-portal").classList.toggle("active", portal === "admin");
   $("#nav-student").classList.toggle("active", portal === "student");
   $("#nav-admin").classList.toggle("active", portal === "admin");
   const first = portal === "student" ? "dashboard" : "overview";
   switchTab(portal, first);
-  if (portal === "admin") { loadAdminStats(); loadFairness(); loadAdminStudents(); loadListings(); }
+  if (portal === "admin") {
+    loadAdminStats(); loadFairness(); loadAdminStudents(); loadListings(); loadAdminApps();
+  }
 }
 function switchTab(portal, tab) {
   const nav = portal === "student" ? "#nav-student" : "#nav-admin";
@@ -287,19 +313,43 @@ $("#explore-prev").addEventListener("click", () => { explorePage--; loadExplore(
 $("#explore-next").addEventListener("click", () => { explorePage++; loadExplore(); });
 
 /* ================= my applications + timeline ================= */
+const STATUS_CLASS = {
+  "Applied": "st-applied", "Shortlisted": "st-shortlisted", "Offer Sent": "st-offer",
+  "Accepted": "st-accepted", "Declined": "st-declined", "Rejected": "st-rejected",
+};
+const statusBadge = (s) => `<span class="st-badge ${STATUS_CLASS[s] || "st-applied"}">${esc(s).toUpperCase()}</span>`;
+
 async function loadApplications() {
   if (!currentStudent) return;
   const apps = await api(`/api/students/${currentStudent.id}/applications`);
   $("#stat-apps").textContent = apps.length;
+  const offers = apps.filter((a) => a.status === "Offer Sent").length;
+  document.querySelector(".border-saffron .stat-value").innerHTML =
+    `${offers} <span class="stat-sub">/ 2 permitted</span>`;
   $("#applications-list").innerHTML = apps.length ? apps.map((a) => `
     <div class="match-card">
       <div class="mc-title-row">
         <span class="mc-title">${esc(a.internship.title)}</span>
-        <span class="badge-verified">${esc(a.status).toUpperCase()}</span>
+        ${statusBadge(a.status)}
       </div>
       <div class="mc-meta">${esc(a.internship.company)} &middot; ${esc(a.internship.location)} &middot; Applied ${new Date(a.applied_at).toLocaleDateString("en-IN")}</div>
+      ${a.status === "Offer Sent" ? `
+        <div class="mc-actions"><span class="reason-text">You have an offer! Respond within 14 days.</span>
+          <div class="mc-buttons">
+            <button class="mini-btn mini-green" data-appid="${a.id}" data-newstatus="Accepted">Accept Offer</button>
+            <button class="mini-btn mini-red" data-appid="${a.id}" data-newstatus="Declined">Decline</button>
+          </div></div>` : ""}
+      ${a.status === "Accepted" ? `<div class="reason-text" style="margin-top:8px">Congratulations! Joining details will be shared by ${esc(a.internship.company)}.</div>` : ""}
     </div>`).join("")
     : `<div class="cold-note">No applications yet. Apply from the Dashboard or Explore Internships. A candidate may hold up to 3 active applications.</div>`;
+  document.querySelectorAll("#applications-list [data-appid]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await api(`/api/applications/${b.dataset.appid}/status`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: b.dataset.newstatus }),
+      });
+      loadApplications();
+    }));
 
   const tl = apps.slice(0, 3).map((a) => `
     <div class="tl-item"><div class="tl-dot tl-green"></div>
@@ -444,6 +494,42 @@ $("#students-search").addEventListener("input", () => { studentsPage = 1; loadAd
 $("#students-prev").addEventListener("click", () => { studentsPage--; loadAdminStudents(); });
 $("#students-next").addEventListener("click", () => { studentsPage++; loadAdminStudents(); });
 
+/* ================= admin: applications & offers ================= */
+async function loadAdminApps() {
+  let apps;
+  try { apps = await adminApi("/api/admin/applications"); }
+  catch { $("#admin-apps-tbody").innerHTML =
+    `<tr><td colspan="6" class="td-muted">Admin sign-in required.</td></tr>`; return; }
+  $("#admin-apps-tbody").innerHTML = apps.length ? apps.map((a) => `
+    <tr>
+      <td class="td-strong">${esc(a.student_name)}<br><span class="td-muted" style="font-size:0.76rem">${esc(a.student_qualification)}</span></td>
+      <td>${esc(a.internship_title)}</td>
+      <td>${esc(a.company)}</td>
+      <td>${new Date(a.applied_at).toLocaleDateString("en-IN")}</td>
+      <td>${statusBadge(a.status)}</td>
+      <td>
+        ${a.status === "Applied" ? `
+          <button class="mini-btn mini-navy" data-appid="${a.id}" data-newstatus="Shortlisted">Shortlist</button>
+          <button class="mini-btn mini-red" data-appid="${a.id}" data-newstatus="Rejected">Reject</button>` : ""}
+        ${a.status === "Shortlisted" ? `
+          <button class="mini-btn mini-green" data-appid="${a.id}" data-newstatus="Offer Sent">Send Offer</button>
+          <button class="mini-btn mini-red" data-appid="${a.id}" data-newstatus="Rejected">Reject</button>` : ""}
+        ${["Offer Sent"].includes(a.status) ? `<span class="td-muted" style="font-size:0.76rem">Awaiting student response</span>` : ""}
+        ${["Accepted", "Declined", "Rejected"].includes(a.status) ? `<span class="td-muted" style="font-size:0.76rem">Closed</span>` : ""}
+      </td>
+    </tr>`).join("")
+    : `<tr><td colspan="6" class="td-muted">No applications yet. Students apply from the Student Portal.</td></tr>`;
+  document.querySelectorAll("#admin-apps-tbody [data-appid]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await adminApi(`/api/applications/${b.dataset.appid}/status`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: b.dataset.newstatus }),
+      });
+      loadAdminApps();
+      loadApplications();
+    }));
+}
+
 /* ================= admin: listings + add job ================= */
 let listingsPage = 1;
 const LISTINGS_SIZE = 12;
@@ -580,8 +666,11 @@ function intakeMsg(who, text) {
   $("#intake-messages").appendChild(div);
   $("#intake-messages").scrollTop = $("#intake-messages").scrollHeight;
 }
-function askCurrent() {
+async function askCurrent() {
   const step = INTAKE_STEPS[intake.step];
+  const typing = showTyping($("#intake-messages"));
+  await new Promise((r) => setTimeout(r, 550));
+  typing.remove();
   intakeMsg("bot", step.ask(currentStudent));
   $("#intake-quick").innerHTML = step.options().map((o) =>
     `<button class="quick-btn">${esc(o)}</button>`).join("");
@@ -640,15 +729,30 @@ function addChatMsg(who, text) {
   $("#chat-messages").appendChild(div);
   $("#chat-messages").scrollTop = $("#chat-messages").scrollHeight;
 }
+function showTyping(container) {
+  const div = document.createElement("div");
+  div.className = "chat-msg chat-bot typing-bubble";
+  div.innerHTML = `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
 async function sendChat() {
   const msg = $("#chat-input").value.trim();
   if (!msg) return;
   addChatMsg("user", msg);
   $("#chat-input").value = "";
+  const typing = showTyping($("#chat-messages"));
+  const started = Date.now();
   const res = await api("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message: msg }),
   });
+  // keep the typing dots visible briefly so the reply feels composed
+  const minTyping = 650;
+  if (Date.now() - started < minTyping)
+    await new Promise((r) => setTimeout(r, minTyping - (Date.now() - started)));
+  typing.remove();
   addChatMsg("bot", res.reply);
 }
 $("#chat-send").addEventListener("click", sendChat);

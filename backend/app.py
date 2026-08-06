@@ -189,6 +189,56 @@ def list_applications(student_id: int):
             for r in rows]
 
 
+def require_admin(authorization: str = Header("")):
+    token = authorization.removeprefix("Bearer ").strip()
+    if not auth.is_admin_token(token):
+        raise HTTPException(403, "Admin sign-in required.")
+
+
+APPLICATION_FLOW = ["Applied", "Shortlisted", "Offer Sent", "Accepted", "Declined", "Rejected"]
+ADMIN_STATUSES = {"Shortlisted", "Offer Sent", "Rejected"}
+STUDENT_STATUSES = {"Accepted", "Declined"}
+
+
+class StatusBody(BaseModel):
+    status: str
+
+
+@app.patch("/api/applications/{app_id}/status")
+def update_application_status(app_id: int, item: StatusBody,
+                              authorization: str = Header("")):
+    if item.status not in ADMIN_STATUSES | STUDENT_STATUSES:
+        raise HTTPException(400, f"Status must be one of {sorted(ADMIN_STATUSES | STUDENT_STATUSES)}")
+    if item.status in ADMIN_STATUSES:
+        require_admin(authorization)
+    with get_conn() as conn:
+        cur = conn.execute("UPDATE applications SET status=? WHERE id=?",
+                           (item.status, app_id))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Application not found")
+    return {"ok": True, "status": item.status}
+
+
+@app.get("/api/admin/applications")
+def admin_applications(authorization: str = Header("")):
+    require_admin(authorization)
+    students = {s["id"]: s for s in load_students()}
+    internships = {j["id"]: j for j in load_internships()}
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM applications ORDER BY applied_at DESC").fetchall()
+    out = []
+    for r in rows:
+        s, j = students.get(r["student_id"]), internships.get(r["internship_id"])
+        if not s or not j:
+            continue
+        out.append({"id": r["id"], "status": r["status"], "applied_at": r["applied_at"],
+                    "student_name": s["name"], "student_qualification": s["qualification"],
+                    "internship_title": j["title"], "company": j["company"],
+                    "location": j["location"]})
+    return out
+
+
 @app.get("/api/admin/students")
 def admin_students(search: str = "", page: int = Query(1, ge=1),
                    page_size: int = Query(20, ge=1, le=250)):

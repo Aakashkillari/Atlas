@@ -10,6 +10,11 @@ from database import get_conn, row_to_student
 
 PBKDF2_ITERATIONS = 200_000
 
+# Prototype admin account (Phase 2 moves this to full RBAC with company roles)
+ADMIN_EMAIL = "admin@gmail.com"
+ADMIN_PASSWORD = "admin@1234"
+ADMIN_USER_ID = 0
+
 
 def _hash(password: str, salt: str) -> str:
     return hashlib.pbkdf2_hmac(
@@ -43,6 +48,15 @@ def signup(name: str, email: str, password: str) -> dict:
 
 def login(email: str, password: str) -> dict:
     email = email.strip().lower()
+    if email == ADMIN_EMAIL:
+        if not secrets.compare_digest(password, ADMIN_PASSWORD):
+            raise ValueError("Invalid email or password.")
+        token = secrets.token_hex(32)
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO sessions (token, user_id, created_at) VALUES (?,?,?)",
+                (token, ADMIN_USER_ID, datetime.now(timezone.utc).isoformat()))
+        return {"token": token, "admin": True, "student": None}
     with get_conn() as conn:
         user = conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
         if not user or not secrets.compare_digest(
@@ -65,6 +79,16 @@ def student_for_token(token: str) -> dict | None:
             " JOIN students s ON s.id = u.student_id"
             " WHERE x.token=?", (token,)).fetchone()
     return row_to_student(row) if row else None
+
+
+def is_admin_token(token: str) -> bool:
+    if not token:
+        return False
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM sessions WHERE token=? AND user_id=?",
+            (token, ADMIN_USER_ID)).fetchone()
+    return bool(row)
 
 
 def logout(token: str) -> None:
