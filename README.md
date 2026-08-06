@@ -26,6 +26,23 @@ Admin Console: national conversion funnel, live demo stats, fairness monitor
 company each student was allocated to, internship listings with an add-new-internship
 form, and a Run Allocation Engine button.
 
+## Authentication
+
+Email/password student accounts (PBKDF2-hashed passwords, DB-backed session
+tokens) in `backend/auth.py`. Sign up creates a fresh student profile; a
+"Continue as demo student" option keeps the judge-friendly demo flow. The
+schema works unchanged on PostgreSQL later.
+
+## Optional LLM mode (off by default)
+
+Templates power explanations and the chatbot, so the demo never depends on a
+network. To upgrade the chatbot to a real LLM, set ONE env var before starting:
+
+- `ANTHROPIC_API_KEY` for Claude Haiku 4.5 (recommended), or
+- `GEMINI_API_KEY` for Google Gemini Flash (free tier)
+
+Any LLM failure silently falls back to the template answer (`backend/llm.py`).
+
 ## Run it
 
 ```bash

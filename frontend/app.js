@@ -10,6 +10,79 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
 
 let currentStudent = null;
 let internshipCache = {};
+let authToken = localStorage.getItem("atlas_token") || "";
+let demoMode = false;
+
+/* ================= authentication ================= */
+let authMode = "login";
+function showAuth() { $("#auth-backdrop").classList.add("show"); }
+function hideAuth() { $("#auth-backdrop").classList.remove("show"); }
+function setAuthMode(mode) {
+  authMode = mode;
+  $("#auth-name-row").style.display = mode === "signup" ? "flex" : "none";
+  $("#auth-name").required = mode === "signup";
+  $("#auth-title").textContent = mode === "signup" ? "Create Student Account" : "Student Sign In";
+  $("#auth-submit").textContent = mode === "signup" ? "Create Account" : "Sign In";
+  $("#auth-mode-toggle").textContent = mode === "signup"
+    ? "Already registered? Sign in" : "New here? Create an account";
+  $("#auth-error").textContent = "";
+}
+$("#auth-mode-toggle").addEventListener("click", () =>
+  setAuthMode(authMode === "login" ? "signup" : "login"));
+$("#auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#auth-error").textContent = "";
+  try {
+    const path = authMode === "signup" ? "/api/auth/signup" : "/api/auth/login";
+    const body = { email: $("#auth-email").value, password: $("#auth-password").value };
+    if (authMode === "signup") body.name = $("#auth-name").value;
+    const res = await api(path, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    authToken = res.token;
+    localStorage.setItem("atlas_token", authToken);
+    demoMode = false;
+    hideAuth();
+    enterSignedIn(res.student);
+    if (authMode === "signup") switchTab("student", "profile");
+  } catch (err) { $("#auth-error").textContent = err.message; }
+});
+$("#auth-demo").addEventListener("click", async () => {
+  demoMode = true;
+  hideAuth();
+  $("#student-select").style.display = "";
+  $("#student-name").style.display = "none";
+  $("#logout-btn").style.display = "none";
+  await loadStudents();
+});
+$("#logout-btn").addEventListener("click", async () => {
+  await api("/api/auth/logout", { method: "POST",
+    headers: { Authorization: "Bearer " + authToken } }).catch(() => {});
+  authToken = "";
+  localStorage.removeItem("atlas_token");
+  location.reload();
+});
+
+function enterSignedIn(student) {
+  $("#student-select").style.display = "none";
+  $("#student-name").style.display = "";
+  $("#student-name").textContent = student.name;
+  $("#logout-btn").style.display = "";
+  applyStudent(student);
+}
+
+async function initSession() {
+  if (authToken) {
+    try {
+      const student = await api("/api/auth/me",
+        { headers: { Authorization: "Bearer " + authToken } });
+      enterSignedIn(student);
+      return;
+    } catch { authToken = ""; localStorage.removeItem("atlas_token"); }
+  }
+  showAuth();
+}
 
 /* ================= portal + tab switching ================= */
 function switchPortal(portal) {
@@ -49,8 +122,12 @@ async function loadStudents() {
   await selectStudent(data.items[0].id);
 }
 async function selectStudent(id) {
-  currentStudent = await api(`/api/students/${id}`);
+  const student = await api(`/api/students/${id}`);
   $("#student-select").value = id;
+  applyStudent(student);
+}
+function applyStudent(student) {
+  currentStudent = student;
   $("#candidate-id").textContent =
     `Candidate ID PMIS-2026-${String(880000 + currentStudent.id)}`;
   const filled = ["skills", "preferred_locations", "preferred_sectors"]
@@ -448,4 +525,4 @@ const SECTOR_LIST = ["IT & Software", "Banking & Finance", "Manufacturing",
 $("#rec-sector").innerHTML += SECTOR_LIST.map((s) => `<option>${s}</option>`).join("");
 
 renderFunnel();
-loadStudents();
+initSession();

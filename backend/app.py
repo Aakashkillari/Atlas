@@ -3,12 +3,14 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import auth
 import chatbot
+import llm
 from database import get_conn, init_db, row_to_internship, row_to_student
 from matching import engine
 
@@ -241,13 +243,63 @@ def admin_stats():
             "allocated": n_allocated, "verified_internships": n_verified}
 
 
+class SignupBody(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/api/auth/signup")
+def auth_signup(item: SignupBody):
+    try:
+        return auth.signup(item.name, item.email, item.password)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/auth/login")
+def auth_login(item: LoginBody):
+    try:
+        return auth.login(item.email, item.password)
+    except ValueError as e:
+        raise HTTPException(401, str(e))
+
+
+@app.get("/api/auth/me")
+def auth_me(authorization: str = Header("")):
+    token = authorization.removeprefix("Bearer ").strip()
+    student = auth.student_for_token(token) if token else None
+    if not student:
+        raise HTTPException(401, "Not signed in")
+    return student
+
+
+@app.post("/api/auth/logout")
+def auth_logout(authorization: str = Header("")):
+    token = authorization.removeprefix("Bearer ").strip()
+    if token:
+        auth.logout(token)
+    return {"ok": True}
+
+
 class ChatQuery(BaseModel):
     message: str
 
 
 @app.post("/api/chat")
 def chat(item: ChatQuery):
-    return chatbot.answer(item.message, load_internships())
+    internships = load_internships()
+    result = chatbot.answer(item.message, internships)
+    if llm.enabled():
+        context = [j for j in internships if j["id"] in result["internships"]]
+        result["reply"] = llm.chat_answer(item.message, context, result["reply"])
+        result["llm"] = True
+    return result
 
 
 @app.post("/api/allocate")

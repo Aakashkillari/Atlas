@@ -44,6 +44,21 @@ CREATE TABLE IF NOT EXISTS internships (
     assessment_stages TEXT NOT NULL DEFAULT '[]'  -- JSON list
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    student_id INTEGER NOT NULL REFERENCES students(id),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS applications (
     id INTEGER PRIMARY KEY,
     student_id INTEGER NOT NULL REFERENCES students(id),

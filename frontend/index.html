@@ -73,7 +73,9 @@
         <div class="welcome-label" data-i18n="welcomeBack">WELCOME BACK</div>
         <div class="welcome-name-row">
           <select id="student-select" class="student-select"></select>
+          <span id="student-name" class="student-name" style="display:none"></span>
           <span id="candidate-id" class="candidate-id"></span>
+          <button id="logout-btn" class="link-btn" style="display:none" data-i18n="signOut">Sign out</button>
         </div>
         <div class="profile-progress">
           <div class="progress-track"><div id="profile-bar" class="progress-fill"></div></div>
@@ -319,6 +321,28 @@
     </div>
   </section>
 </main>
+
+<!-- auth modal -->
+<div id="auth-backdrop" class="modal-backdrop">
+  <div class="modal auth-modal">
+    <h3 id="auth-title" data-i18n="signIn">Student Sign In</h3>
+    <p class="sub-line" data-i18n="authSub">Sign in to your ATLAS account, create a new one, or continue with a demo profile.</p>
+    <form id="auth-form" class="auth-form">
+      <label id="auth-name-row" style="display:none"><span data-i18n="fullName">Full name</span>
+        <input id="auth-name" type="text" autocomplete="name" placeholder="Ananya Sharma"></label>
+      <label><span>Email</span>
+        <input id="auth-email" type="email" required autocomplete="email" placeholder="you@example.in"></label>
+      <label><span data-i18n="password">Password</span>
+        <input id="auth-password" type="password" required minlength="6" autocomplete="current-password" placeholder="Minimum 6 characters"></label>
+      <div id="auth-error" class="auth-error"></div>
+      <button type="submit" id="auth-submit" class="btn btn-navy" data-i18n="signInBtn">Sign In</button>
+    </form>
+    <div class="auth-alt">
+      <button id="auth-mode-toggle" class="link-btn" data-i18n="createAccount">New here? Create an account</button>
+      <button id="auth-demo" class="link-btn" data-i18n="demoMode">Continue as demo student &rarr;</button>
+    </div>
+  </div>
+</div>
 
 <!-- details modal -->
 <div id="modal-backdrop" class="modal-backdrop">

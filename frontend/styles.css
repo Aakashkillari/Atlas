@@ -351,6 +351,22 @@ main { flex: 1; max-width: 1280px; margin: 0 auto; padding: 24px; width: 100%; }
 .modal-section h4 { color: var(--navy); font-size: 0.92rem; margin-bottom: 6px; }
 .modal-meta { color: #4b5563; font-size: 0.88rem; margin: 8px 0; }
 
+/* ---------- auth ---------- */
+.auth-modal { max-width: 420px; }
+.auth-form { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.auth-form label { display: flex; flex-direction: column; gap: 5px; font-size: 0.82rem; font-weight: 600; color: #374151; }
+.auth-form input {
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 0.9rem; outline-color: var(--saffron);
+}
+.auth-error { color: #b91c1c; font-size: 0.82rem; font-weight: 600; min-height: 1em; }
+.auth-alt { display: flex; justify-content: space-between; margin-top: 14px; flex-wrap: wrap; gap: 8px; }
+.link-btn {
+  background: none; border: none; color: var(--navy); font-weight: 700;
+  font-size: 0.82rem; cursor: pointer; text-decoration: underline; padding: 0;
+}
+.student-name { font-size: 1.15rem; font-weight: 700; color: var(--navy); }
+
 /* ---------- chatbot ---------- */
 .chat-fab {
   position: fixed; bottom: 24px; right: 24px; width: 54px; height: 54px;
