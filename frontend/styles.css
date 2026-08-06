@@ -394,6 +394,22 @@ main { flex: 1; max-width: 1280px; margin: 0 auto; padding: 24px; width: 100%; }
   outline-color: var(--saffron);
 }
 
+/* ---------- profile intake chat ---------- */
+.mode-toggle {
+  display: flex; background: #f1f3f7; border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px;
+}
+.intake-chat { max-width: 620px; margin: 0 auto; }
+.intake-messages { height: 340px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; }
+.intake-quick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; min-height: 10px; }
+.quick-btn {
+  background: var(--white); border: 1.5px solid var(--navy); color: var(--navy);
+  padding: 7px 14px; border-radius: 16px; font-size: 0.82rem; font-weight: 700; cursor: pointer;
+}
+.quick-btn:hover { background: var(--navy); color: var(--white); }
+.quick-btn.q-green { border-color: var(--green); color: var(--green-dark); }
+.quick-btn.q-green:hover { background: var(--green); color: var(--white); }
+
 /* ---------- footer ---------- */
 .site-footer { background: var(--navy-deep); color: #b8c1d1; margin-top: 30px; }
 .footer-inner {

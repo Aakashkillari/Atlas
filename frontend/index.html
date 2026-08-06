@@ -164,8 +164,26 @@
 
   <!-- ================= STUDENT: PROFILE ================= -->
   <section id="tab-profile" class="tab-view">
-    <div class="section-head"><h2 data-i18n="profileSetup">Profile Setup</h2></div>
-    <div class="panel-card">
+    <div class="section-head">
+      <h2 data-i18n="profileSetup">Profile Setup</h2>
+      <div class="mode-toggle">
+        <button id="mode-form" class="ptoggle active" data-i18n="formMode">Form</button>
+        <button id="mode-chat" class="ptoggle" data-i18n="chatMode">Interactive Assistant</button>
+      </div>
+    </div>
+
+    <div id="profile-chat-card" class="panel-card" style="display:none">
+      <div class="intake-chat">
+        <div id="intake-messages" class="chat-messages intake-messages"></div>
+        <div id="intake-quick" class="intake-quick"></div>
+        <div class="chat-input-row">
+          <input id="intake-input" type="text" placeholder="Type your answer...">
+          <button id="intake-send" class="btn btn-navy" data-i18n="send">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="profile-form-card" class="panel-card">
       <form id="profile-form" class="profile-grid">
         <label><span data-i18n="fSkills">Skills (comma separated)</span>
           <input id="f-skills" type="text" placeholder="Python, SQL, Excel"></label>

@@ -491,6 +491,141 @@ $("#add-job-form").addEventListener("submit", async (e) => {
   loadListings(); loadAdminStats();
 });
 
+/* ================= profile intake assistant ================= */
+$("#mode-form").addEventListener("click", () => setProfileMode("form"));
+$("#mode-chat").addEventListener("click", () => setProfileMode("chat"));
+function setProfileMode(mode) {
+  $("#mode-form").classList.toggle("active", mode === "form");
+  $("#mode-chat").classList.toggle("active", mode === "chat");
+  $("#profile-form-card").style.display = mode === "form" ? "block" : "none";
+  $("#profile-chat-card").style.display = mode === "chat" ? "block" : "none";
+  if (mode === "chat") startIntake();
+}
+
+const QUAL_OPTIONS = ["12th Pass", "Diploma", "BA", "BCom", "BSc", "BBA", "BPharm",
+  "BTech CSE", "BTech Mechanical", "BTech Electrical", "MBA", "MTech", "MSc"];
+const QUAL_LEVEL = (q) => q === "12th Pass" ? 1 : q === "Diploma" ? 2
+  : ["MBA", "MTech", "MSc"].includes(q) ? 4 : 3;
+
+let intake = null;
+
+const INTAKE_STEPS = [
+  {
+    key: "qualification",
+    ask: (s) => `What is your highest qualification?`,
+    options: () => QUAL_OPTIONS,
+    parse: (v) => {
+      const match = QUAL_OPTIONS.find((q) => q.toLowerCase() === v.trim().toLowerCase());
+      return match || null;
+    },
+    error: "Please pick one of the listed qualifications (tap a button below).",
+  },
+  {
+    key: "skills",
+    ask: () => "Great. Now tell me your skills, separated by commas. For example: Python, SQL, Excel",
+    options: () => [],
+    parse: (v) => {
+      const list = v.split(",").map((x) => x.trim()).filter(Boolean);
+      return list.length ? list : null;
+    },
+    error: "Please list at least one skill, separated by commas.",
+  },
+  {
+    key: "locations",
+    ask: () => "Which cities would you prefer to work in? Separate with commas, or say Any if you are open to relocating anywhere.",
+    options: () => ["Any"],
+    parse: (v) => {
+      const list = v.split(",").map((x) => x.trim()).filter(Boolean);
+      return list.length ? list : null;
+    },
+    error: "Please name at least one city, or tap Any.",
+  },
+  {
+    key: "sectors",
+    ask: () => "Which sector interests you the most? You can tap one or type more than one, separated by commas.",
+    options: () => SECTOR_LIST,
+    parse: (v) => {
+      const list = v.split(",").map((x) => x.trim()).filter(Boolean);
+      return list.length ? list : null;
+    },
+    error: "Please choose at least one sector.",
+  },
+  {
+    key: "first_generation",
+    ask: () => "Are you the first person in your family to attend college? This helps the scheme's fairness policy work for you; it never reduces your score.",
+    options: () => ["Yes", "No"],
+    parse: (v) => /^y/i.test(v.trim()) ? true : /^n/i.test(v.trim()) ? false : null,
+    error: "Please answer Yes or No.",
+  },
+  {
+    key: "college_tier",
+    ask: () => "Which tier is your college? Tier 1 (IIT/NIT/top university), Tier 2 (state university), or Tier 3 (local college). If unsure, pick Tier 3.",
+    options: () => ["Tier 1", "Tier 2", "Tier 3"],
+    parse: (v) => { const m = v.match(/[123]/); return m ? Number(m[0]) : null; },
+    error: "Please pick Tier 1, 2 or 3.",
+  },
+];
+
+function startIntake() {
+  if (!currentStudent) return;
+  intake = { step: 0, answers: {} };
+  $("#intake-messages").innerHTML = "";
+  intakeMsg("bot", `Namaste ${currentStudent.name.split(" ")[0]}! I will set up your profile in a few quick questions. You can tap an option or type your answer.`);
+  askCurrent();
+}
+function intakeMsg(who, text) {
+  const div = document.createElement("div");
+  div.className = "chat-msg " + (who === "user" ? "chat-user" : "chat-bot");
+  div.textContent = text;
+  $("#intake-messages").appendChild(div);
+  $("#intake-messages").scrollTop = $("#intake-messages").scrollHeight;
+}
+function askCurrent() {
+  const step = INTAKE_STEPS[intake.step];
+  intakeMsg("bot", step.ask(currentStudent));
+  $("#intake-quick").innerHTML = step.options().map((o) =>
+    `<button class="quick-btn">${esc(o)}</button>`).join("");
+  document.querySelectorAll("#intake-quick .quick-btn").forEach((b) =>
+    b.addEventListener("click", () => handleIntake(b.textContent)));
+}
+async function handleIntake(value) {
+  const step = INTAKE_STEPS[intake.step];
+  intakeMsg("user", value);
+  const parsed = step.parse(value);
+  if (parsed === null) { intakeMsg("bot", step.error); return; }
+  intake.answers[step.key] = parsed;
+  intake.step += 1;
+  if (intake.step < INTAKE_STEPS.length) { askCurrent(); return; }
+
+  // all answers collected: save to the database
+  $("#intake-quick").innerHTML = "";
+  const a = intake.answers;
+  await api(`/api/students/${currentStudent.id}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      skills: a.skills,
+      qualification: a.qualification,
+      qualification_level: QUAL_LEVEL(a.qualification),
+      preferred_locations: a.locations,
+      preferred_sectors: a.sectors,
+      first_generation: a.first_generation,
+      college_tier: a.college_tier,
+    }),
+  });
+  intakeMsg("bot", `All set! Your profile is saved: ${a.qualification}, skills ${a.skills.join(", ")}, preferred ${a.locations.join(", ")} in ${a.sectors.join(", ")}. Your recommendations have been refreshed; open the Dashboard to see them.`);
+  $("#intake-quick").innerHTML =
+    `<button class="quick-btn q-green" id="intake-goto-dash">See my recommendations &rarr;</button>`;
+  $("#intake-goto-dash").addEventListener("click", () => switchTab("student", "dashboard"));
+  await selectStudent(currentStudent.id);
+}
+$("#intake-send").addEventListener("click", () => {
+  const v = $("#intake-input").value.trim();
+  if (v && intake) { $("#intake-input").value = ""; handleIntake(v); }
+});
+$("#intake-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("#intake-send").click(); }
+});
+
 /* ================= chatbot ================= */
 $("#chat-fab").addEventListener("click", () => {
   $("#chat-panel").classList.toggle("show");
