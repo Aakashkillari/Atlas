@@ -6,7 +6,7 @@ Set ONE of these environment variables before starting the server to enable:
   GROK_API_KEY       -> xAI Grok (grok-3-mini)
   NVIDIA_API_KEY     -> NVIDIA Build NIM (any hosted model, e.g. GLM;
                         set NVIDIA_MODEL to the model id shown on
-                        build.nvidia.com, e.g. "zai/glm-5.2")
+                        build.nvidia.com, e.g. "z-ai/glm-5.2")
 
 Every call is wrapped so any failure (no key, no network, quota) silently
 falls back to the template answer. The demo can never break because of this.
@@ -32,7 +32,7 @@ def _call_nvidia(prompt: str) -> str:
             "content-type": "application/json",
         },
         data=json.dumps({
-            "model": os.environ.get("NVIDIA_MODEL", "zai/glm-5.2"),
+            "model": os.environ.get("NVIDIA_MODEL", "z-ai/glm-5.2"),
             "max_tokens": 300,
             "messages": [{"role": "user", "content": prompt}],
         }).encode(),
