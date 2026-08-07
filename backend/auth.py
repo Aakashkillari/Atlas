@@ -6,7 +6,7 @@ import hashlib
 import secrets
 from datetime import datetime, timezone
 
-from database import get_conn, row_to_student
+from database import get_conn, insert_returning_id, row_to_student
 
 PBKDF2_ITERATIONS = 200_000
 
@@ -30,14 +30,14 @@ def signup(name: str, email: str, password: str) -> dict:
     with get_conn() as conn:
         if conn.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             raise ValueError("An account with this email already exists.")
-        cur = conn.execute(
+        student_id = insert_returning_id(
+            conn,
             "INSERT INTO students (name, email, qualification, qualification_level,"
             " skills, preferred_locations, preferred_sectors, home_state,"
             " first_generation, college_tier, available_months)"
             " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (name.strip(), email, "12th Pass", 1, "[]", '["Any"]', "[]",
              "", 0, 3, 12))
-        student_id = cur.lastrowid
         salt = secrets.token_hex(16)
         conn.execute(
             "INSERT INTO users (email, password_hash, salt, student_id, created_at)"

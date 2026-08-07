@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import auth
 import chatbot
 import llm
-from database import get_conn, init_db, row_to_internship, row_to_student
+from database import get_conn, init_db, insert_returning_id, row_to_internship, row_to_student
 from matching import engine
 
 app = FastAPI(title="ATLAS", description="AI-based internship matching for SIH25033")
@@ -135,7 +135,8 @@ def add_internship(item: NewInternship):
         f"{item.title} at {item.company}, {item.location}. Work on "
         f"{', '.join(item.skills_required[:3])} under the PM Internship Scheme.")
     with get_conn() as conn:
-        cur = conn.execute(
+        new_id = insert_returning_id(
+            conn,
             "INSERT INTO internships (title, company, sector, location, state,"
             " skills_required, min_qualification_level, duration_months, stipend,"
             " capacity, verified, description, company_about, assessment_stages)"
@@ -147,7 +148,7 @@ def add_internship(item: NewInternship):
              item.company_about, json.dumps(item.assessment_stages)),
         )
         row = conn.execute("SELECT * FROM internships WHERE id=?",
-                           (cur.lastrowid,)).fetchone()
+                           (new_id,)).fetchone()
     return row_to_internship(row)
 
 
