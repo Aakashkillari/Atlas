@@ -110,10 +110,6 @@ async function initSession() {
 /* ================= portal + tab switching ================= */
 function switchPortal(portal) {
   if (portal === "admin" && !adminToken) { setAuthMode("admin"); showAuth(); return; }
-  $("#btn-student-portal").classList.toggle("active", portal === "student");
-  $("#btn-admin-portal").classList.toggle("active", portal === "admin");
-  $("#nav-student").classList.toggle("active", portal === "student");
-  $("#nav-admin").classList.toggle("active", portal === "admin");
   const first = portal === "student" ? "dashboard" : "overview";
   switchTab(portal, first);
   if (portal === "admin") {
@@ -121,12 +117,23 @@ function switchPortal(portal) {
     loadLivePmis();
   }
 }
+const ADMIN_TABS = ["overview", "admin-students", "admin-apps", "listings"];
 function switchTab(portal, tab) {
-  const nav = portal === "student" ? "#nav-student" : "#nav-admin";
   document.querySelectorAll(".tab-view").forEach((v) => v.classList.remove("active"));
-  document.querySelectorAll(nav + " .nav-tab").forEach((b) =>
+  document.querySelectorAll("#nav-student .nav-tab").forEach((b) =>
+    b.classList.toggle("active", b.dataset.tab === tab && portal === "student"));
+  document.querySelectorAll("#nav-admin .nav-tab").forEach((b) =>
     b.classList.toggle("active", b.dataset.tab === tab));
-  $("#tab-" + tab).classList.add("active");
+  // admin pills live inside tab-overview; keep them visible on all admin tabs
+  const view = $("#tab-" + tab);
+  view.classList.add("active");
+  if (ADMIN_TABS.includes(tab) && tab !== "overview") {
+    // move the pill bar into the active admin view so navigation stays visible
+    const pills = $("#nav-admin");
+    view.prepend(pills);
+  } else if (tab === "overview") {
+    $("#tab-overview").prepend($("#nav-admin"));
+  }
 }
 $("#btn-student-portal").addEventListener("click", () => switchPortal("student"));
 $("#btn-admin-portal").addEventListener("click", () => switchPortal("admin"));
@@ -155,13 +162,18 @@ async function selectStudent(id) {
 }
 function applyStudent(student) {
   currentStudent = student;
+  const first = student.name.split(" ")[0];
+  $("#hero-name").textContent = first;
+  $("#avatar-circle").textContent = first[0].toUpperCase();
   $("#candidate-id").textContent =
     `Candidate ID PMIS-2026-${String(880000 + currentStudent.id)}`;
   const filled = ["skills", "preferred_locations", "preferred_sectors"]
     .filter((k) => currentStudent[k].length > 0).length;
-  const pct = Math.round(40 + (filled / 3) * 55 + (currentStudent.skills.length >= 3 ? 5 : 0));
-  $("#profile-bar").style.width = Math.min(pct, 100) + "%";
-  $("#profile-pct").textContent = `Profile ${Math.min(pct, 100)}% complete`;
+  const pct = Math.min(Math.round(40 + (filled / 3) * 55 +
+    (currentStudent.skills.length >= 3 ? 5 : 0)), 100);
+  $("#profile-bar").style.width = pct + "%";
+  $("#profile-pct-num").textContent = pct;
+  $("#profile-pct").textContent = pct >= 90 ? "Looking great!" : "Almost there!";
   fillProfileForm();
   loadRecommendations();
   loadApplications();
@@ -185,6 +197,60 @@ async function loadRecommendations() {
   $("#rec-list").innerHTML = recs.map((r) => matchCard(r, data.cold_start)).join("")
     || `<div class="cold-note">No eligible internships match the current filters.</div>`;
   bindCardActions("#rec-list");
+
+  // stat card + radar from the top recommendation
+  if (!data.cold_start && data.recommendations.length) {
+    const top = data.recommendations[0];
+    const pct = Math.round(top.total_score * 100);
+    $("#stat-match").textContent = pct;
+    $("#stat-match-sub").textContent =
+      pct >= 75 ? "Excellent Match" : pct >= 50 ? "Good Match" : "Improve your profile";
+    $("#overall-match").textContent = pct + "%";
+    renderRadar(top);
+  } else {
+    $("#stat-match").textContent = "--";
+    $("#stat-match-sub").textContent = "Complete your profile";
+    $("#overall-match").textContent = "--%";
+    $("#radar-wrap").innerHTML =
+      `<p class="sub-line" style="text-align:center; padding:20px 0">Add skills to your profile to see your match breakdown.</p>`;
+  }
+}
+
+function renderRadar(r) {
+  const axes = [
+    ["Skills Match", r.skill_score],
+    ["Location Fit", r.location_score],
+    ["Sector Fit", r.sector_score],
+    ["Preference Fit", (r.location_score + r.sector_score) / 2],
+    ["Overall", r.total_score],
+  ];
+  const cx = 130, cy = 115, R = 82, n = axes.length;
+  const pt = (i, v) => {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+    return [cx + Math.cos(a) * R * v, cy + Math.sin(a) * R * v];
+  };
+  const ring = (v) => axes.map((_, i) => pt(i, v).map((x) => x.toFixed(1)).join(",")).join(" ");
+  const dataPoly = axes.map(([, v], i) => pt(i, Math.max(v, 0.08)).map((x) => x.toFixed(1)).join(",")).join(" ");
+  const labels = axes.map(([name, v], i) => {
+    const [x, y] = pt(i, 1.26);
+    return `<text x="${x.toFixed(0)}" y="${y.toFixed(0)}" text-anchor="middle"
+      font-size="9" font-weight="700" fill="#7a8194">${name}</text>
+      <text x="${x.toFixed(0)}" y="${(y + 11).toFixed(0)}" text-anchor="middle"
+      font-size="9" font-weight="800" fill="#1f2430">${Math.round(v * 100)}%</text>`;
+  }).join("");
+  const spokes = axes.map((_, i) => {
+    const [x, y] = pt(i, 1);
+    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#e9ecf2"/>`;
+  }).join("");
+  $("#radar-wrap").innerHTML = `
+    <svg viewBox="0 0 260 240" width="260" height="240" role="img" aria-label="Match breakdown radar chart">
+      ${[0.33, 0.66, 1].map((v) => `<polygon points="${ring(v)}" fill="none" stroke="#e9ecf2"/>`).join("")}
+      ${spokes}
+      <polygon points="${dataPoly}" fill="rgba(255,122,26,0.18)" stroke="#FF7A1A" stroke-width="2"/>
+      ${axes.map(([, v], i) => { const [x, y] = pt(i, Math.max(v, 0.08));
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#FF7A1A"/>`; }).join("")}
+      ${labels}
+    </svg>`;
 }
 $("#rec-search").addEventListener("input", () => loadRecommendations());
 $("#rec-sector").addEventListener("change", () => loadRecommendations());
@@ -192,13 +258,6 @@ $("#rec-sector").addEventListener("change", () => loadRecommendations());
 function matchCard(r, coldStart) {
   const j = r.internship;
   const pct = coldStart ? null : Math.round(r.total_score * 100);
-  const ring = pct === null ? "" : `
-    <div class="match-ring" style="background:
-      conic-gradient(var(--navy) ${pct * 3.6}deg, #e5e7eb 0deg);
-      -webkit-mask: radial-gradient(circle, transparent 56%, black 57%);
-      mask: radial-gradient(circle, transparent 56%, black 57%);"></div>
-    <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-      font-family:Georgia,serif; font-weight:700; font-size:1rem; color:var(--navy)">${pct}%</div>`;
   return `<div class="match-card" data-id="${j.id}">
     <div class="mc-top">
       <div style="flex:1">
@@ -208,8 +267,9 @@ function matchCard(r, coldStart) {
         </div>
         <div class="mc-meta">${esc(j.company)} &middot; ${esc(j.location)}, ${esc(j.state)} &middot; ${j.duration_months} months &middot; &#8377;${j.stipend.toLocaleString("en-IN")}/month</div>
         <span class="sector-tag">${esc(j.sector)}</span>
+        ${j.skills_required.slice(0, 3).map((s) => `<span class="sector-tag">${esc(s)}</span>`).join("")}
       </div>
-      ${pct === null ? "" : `<div style="position:relative; width:62px; height:62px">${ring}</div>`}
+      ${pct === null ? "" : `<div class="score-pill-wrap"><span class="score-pill">${pct}% Match</span></div>`}
     </div>
     <div class="mc-actions">
       ${pct === null ? "<span></span>" : `<button class="reason-toggle" data-act="reason">${t("viewReasoning", "View match reasoning &#9660;")}</button>`}
@@ -324,9 +384,20 @@ async function loadApplications() {
   if (!currentStudent) return;
   const apps = await api(`/api/students/${currentStudent.id}/applications`);
   $("#stat-apps").textContent = apps.length;
-  const offers = apps.filter((a) => a.status === "Offer Sent").length;
-  document.querySelector(".border-saffron .stat-value").innerHTML =
-    `${offers} <span class="stat-sub">/ 2 permitted</span>`;
+  $("#stat-apps-active").textContent =
+    apps.filter((a) => ["Applied", "Shortlisted", "Offer Sent"].includes(a.status)).length;
+  $("#stat-shortlisted").textContent =
+    apps.filter((a) => ["Shortlisted", "Offer Sent", "Accepted"].includes(a.status)).length;
+  $("#applications-mini").innerHTML = apps.length ? `
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Company</th><th>Role</th><th>Status</th><th>Applied On</th></tr></thead>
+      <tbody>${apps.slice(0, 4).map((a) => `<tr>
+        <td class="td-strong">${esc(a.internship.company)}</td>
+        <td>${esc(a.internship.title)}</td>
+        <td>${statusBadge(a.status)}</td>
+        <td class="td-muted">${new Date(a.applied_at).toLocaleDateString("en-IN")}</td>
+      </tr>`).join("")}</tbody></table></div>`
+    : `<p class="sub-line">No applications yet. Apply from the recommendations above.</p>`;
   $("#applications-list").innerHTML = apps.length ? apps.map((a) => `
     <div class="match-card">
       <div class="mc-title-row">
@@ -434,15 +505,16 @@ async function loadLivePmis() {
 async function loadAdminStats() {
   const s = await api("/api/admin/stats");
   const cards = [
-    ["STUDENTS REGISTERED", s.students, "border-navy"],
-    ["INTERNSHIPS POSTED", s.internships, "border-saffron"],
-    ["TOTAL CAPACITY", s.capacity, "border-green"],
-    ["APPLICATIONS", s.applications, "border-navy"],
-    ["ALLOCATED", s.allocated, "border-green"],
+    ["Students Registered", s.students, "ico-blue", "&#128100;"],
+    ["Internships Posted", s.internships, "ico-saffron", "&#128188;"],
+    ["Total Capacity", s.capacity, "ico-green", "&#127970;"],
+    ["Applications", s.applications, "ico-purple", "&#128203;"],
+    ["Allocated", s.allocated, "ico-green", "&#9989;"],
   ];
-  $("#admin-stats").innerHTML = cards.map(([label, num, cls]) => `
-    <div class="stat-tile ${cls}"><div class="stat-label">${label}</div>
-    <div class="stat-value">${Number(num).toLocaleString("en-IN")}</div></div>`).join("");
+  $("#admin-stats").innerHTML = cards.map(([label, num, cls, ico]) => `
+    <div class="scard"><div class="scard-ico ${cls}">${ico}</div>
+    <div class="scard-label">${label}</div>
+    <div class="scard-value">${Number(num).toLocaleString("en-IN")}</div></div>`).join("");
 }
 async function loadFairness() {
   const data = await api("/api/allocation");
@@ -783,10 +855,42 @@ async function sendChat() {
 $("#chat-send").addEventListener("click", sendChat);
 $("#chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
 
+/* ================= topbar + sidebar extras ================= */
+$("#hamburger").addEventListener("click", () =>
+  document.querySelector(".app-shell").classList.toggle("collapsed"));
+$("#top-search").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    $("#explore-search").value = e.target.value;
+    switchTab("student", "explore");
+    explorePage = 1;
+    loadExplore();
+  }
+});
+function openAssistant() {
+  $("#chat-panel").classList.add("show");
+  if (!$("#chat-messages").children.length) addChatMsg("bot",
+    "Namaste! I am the ATLAS assistant. Try 'recommend jobs for me', 'my application status', or ask about stipend and eligibility.");
+}
+$("#side-assistant").addEventListener("click", openAssistant);
+$("#qa-assistant").addEventListener("click", openAssistant);
+$("#side-bell").addEventListener("click", () => switchTab("student", "dashboard"));
+
+async function loadImpact() {
+  try {
+    const data = await api("/api/live/pmis");
+    $("#impact-students").textContent = data.total_accepted.toLocaleString("en-IN") + "+";
+    $("#impact-states").textContent = data.records.length + "/36";
+  } catch {
+    $("#impact-students").textContent = "28,141+";
+    $("#impact-states").textContent = "35/36";
+  }
+}
+
 /* ================= sectors dropdown + init ================= */
 const SECTOR_LIST = ["IT & Software", "Banking & Finance", "Manufacturing",
   "Energy", "Healthcare & Pharma", "Retail & FMCG"];
 $("#rec-sector").innerHTML += SECTOR_LIST.map((s) => `<option>${s}</option>`).join("");
 
 renderFunnel();
+loadImpact();
 initSession();
