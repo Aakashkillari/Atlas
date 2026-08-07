@@ -51,10 +51,59 @@ def _search_internships(query: str, internships: list[dict], limit: int = 3) -> 
     return [j for _, j in scored[:limit]]
 
 
-def answer(query: str, internships: list[dict]) -> dict:
+def answer(query: str, internships: list[dict], student: dict | None = None,
+           applications: list[dict] | None = None,
+           recommender=None) -> dict:
     q = query.strip().lower()
-    if not q or re.fullmatch(r"(hi|hello|hey|namaste|help)[!. ]*", q):
-        return {"reply": GREETING, "internships": []}
+    if not q or re.fullmatch(r"(hi|hello|hey|namaste|vanakkam|help)[!. ]*", q):
+        greeting = GREETING
+        if student:
+            greeting = (f"Namaste {student['name'].split(' ')[0]}! " + GREETING)
+        return {"reply": greeting, "internships": []}
+
+    # ---- personalised intents (need a signed-in / selected student) ----
+    if student:
+        if re.search(r"\b(recommend|suggest|for me|best (job|internship)|"
+                     r"match(es)? for me|jobs? for me|internships? for me)\b", q):
+            if recommender is None:
+                return {"reply": "Recommendations are unavailable right now.", "internships": []}
+            rec = recommender(student)
+            if rec["cold_start"] or not rec["recommendations"]:
+                return {"reply": f"{student['name'].split(' ')[0]}, your profile needs a few "
+                                 "more skills before I can match you reliably. Open Profile "
+                                 "and add your skills, then ask me again!", "internships": []}
+            lines = []
+            ids = []
+            for r in rec["recommendations"][:3]:
+                j = r["internship"]
+                ids.append(j["id"])
+                lines.append(f"{j['title']} at {j['company']} ({j['location']}, "
+                             f"{round(r['total_score'] * 100)}% match)")
+            return {"reply": f"Based on your profile ({', '.join(student['skills'][:3])}), "
+                             f"my top matches for you: " + "; ".join(lines) +
+                             ". Open the Dashboard for the full reasoning and to apply.",
+                    "internships": ids}
+
+        if re.search(r"\b(my profile|about me|who am i|my details|my skills)\b", q):
+            return {"reply": f"Here is what I know: {student['name']}, {student['qualification']}, "
+                             f"skills {', '.join(student['skills']) or 'none listed'}, prefers "
+                             f"{', '.join(student['preferred_locations'])} in "
+                             f"{', '.join(student['preferred_sectors']) or 'any sector'}."
+                             + (" You qualify for the scheme's equity uplift."
+                                if student["first_generation"] or student["college_tier"] >= 2 else ""),
+                    "internships": []}
+
+        if re.search(r"\b(my application|my status|my offer|track|applied)\b", q):
+            if not applications:
+                return {"reply": "You have no applications yet. You can hold up to 3 active "
+                                 "applications; apply from the Dashboard or Explore Internships.",
+                        "internships": []}
+            lines = [f"{a['internship']['title']} at {a['internship']['company']}: {a['status']}"
+                     for a in applications[:3]]
+            offers = sum(1 for a in applications if a["status"] == "Offer Sent")
+            extra = f" You have {offers} offer(s) awaiting your response!" if offers else ""
+            return {"reply": "Your applications: " + "; ".join(lines) + "." + extra,
+                    "internships": []}
 
     for pattern, reply in FAQ:
         if re.search(pattern, q):

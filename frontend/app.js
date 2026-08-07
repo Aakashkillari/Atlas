@@ -118,6 +118,7 @@ function switchPortal(portal) {
   switchTab(portal, first);
   if (portal === "admin") {
     loadAdminStats(); loadFairness(); loadAdminStudents(); loadListings(); loadAdminApps();
+    loadLivePmis();
   }
 }
 function switchTab(portal, tab) {
@@ -409,6 +410,27 @@ function renderFunnel() {
       <div class="funnel-track"><div class="funnel-fill" style="width:${Math.max(2, (num / max) * 100)}%; background:${color}"></div></div>
     </div>`).join("");
 }
+async function loadLivePmis() {
+  try {
+    const data = await api("/api/live/pmis");
+    $("#live-badge").style.display = "";
+    const max = Math.max(...data.records.map((r) => r.accepted), 1);
+    $("#live-pmis").innerHTML =
+      `<div class="funnel" style="margin-top:12px">` +
+      data.records.slice(0, 8).map((r) => `
+        <div class="funnel-row">
+          <div class="funnel-top"><span>${esc(r.state)}</span>
+            <span class="funnel-num">${r.accepted.toLocaleString("en-IN")}</span></div>
+          <div class="funnel-track"><div class="funnel-fill" style="width:${Math.max(2, (r.accepted / max) * 100)}%; background:var(--green)"></div></div>
+        </div>`).join("") +
+      `</div><p class="sub-line" style="margin-top:10px">Total accepted (pilot round): <strong>${data.total_accepted.toLocaleString("en-IN")}</strong> &middot; Source: ${esc(data.source)}</p>`;
+  } catch {
+    $("#live-badge").style.display = "none";
+    $("#live-pmis").innerHTML =
+      `<div class="cold-note">Live government data is temporarily unavailable. The national funnel above uses the latest published figures.</div>`;
+  }
+}
+
 async function loadAdminStats() {
   const s = await api("/api/admin/stats");
   const cards = [
@@ -744,9 +766,12 @@ async function sendChat() {
   $("#chat-input").value = "";
   const typing = showTyping($("#chat-messages"));
   const started = Date.now();
+  const headers = { "Content-Type": "application/json" };
+  if (authToken) headers.Authorization = "Bearer " + authToken;
   const res = await api("/api/chat", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: msg }),
+    method: "POST", headers,
+    body: JSON.stringify({ message: msg,
+      student_id: currentStudent ? currentStudent.id : null }),
   });
   // keep the typing dots visible briefly so the reply feels composed
   const minTyping = 650;

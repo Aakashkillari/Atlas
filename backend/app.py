@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 import auth
 import chatbot
+import live_data
 import llm
 from database import get_conn, init_db, insert_returning_id, row_to_internship, row_to_student
 from matching import engine
@@ -340,17 +341,46 @@ def auth_logout(authorization: str = Header("")):
 
 class ChatQuery(BaseModel):
     message: str
+    student_id: int | None = None
 
 
 @app.post("/api/chat")
-def chat(item: ChatQuery):
+def chat(item: ChatQuery, authorization: str = Header("")):
     internships = load_internships()
-    result = chatbot.answer(item.message, internships)
+    students = load_students()
+
+    # resolve the student: signed-in session wins, else explicit demo id
+    token = authorization.removeprefix("Bearer ").strip()
+    student = auth.student_for_token(token) if token else None
+    if student is None and item.student_id is not None:
+        student = next((s for s in students if s["id"] == item.student_id), None)
+
+    applications = None
+    if student:
+        applications = list_applications(student["id"])
+
+    def recommender(s):
+        rec = engine.recommend(s, students, internships, top_n=3)
+        j_by_id = {j["id"]: j for j in internships}
+        for r in rec["recommendations"]:
+            r["internship"] = j_by_id[r["internship_id"]]
+        return rec
+
+    result = chatbot.answer(item.message, internships, student=student,
+                            applications=applications, recommender=recommender)
     if llm.enabled():
         context = [j for j in internships if j["id"] in result["internships"]]
         result["reply"] = llm.chat_answer(item.message, context, result["reply"])
         result["llm"] = True
     return result
+
+
+@app.get("/api/live/pmis")
+def live_pmis():
+    data = live_data.fetch_pmis_stats()
+    if data is None:
+        raise HTTPException(503, "Live government data is temporarily unavailable.")
+    return data
 
 
 @app.post("/api/allocate")
