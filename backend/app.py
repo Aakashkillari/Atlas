@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, File, Header, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -781,4 +781,11 @@ app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 @app.get("/")
 def index():
+    return RedirectResponse("/student")
+
+
+@app.get("/student")
+@app.get("/company")
+@app.get("/admin")
+def portal():
     return FileResponse(FRONTEND / "index.html")

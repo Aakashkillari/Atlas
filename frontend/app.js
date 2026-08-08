@@ -13,6 +13,9 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 let authToken = localStorage.getItem("atlas_token") || "";
+// which portal this URL is for: /student, /company, /admin
+const PATH_ROLE = ["student", "company", "admin"].includes(location.pathname.replace(/\//g, ""))
+  ? location.pathname.replace(/\//g, "") : "student";
 let currentRole = null;      // 'student' | 'company' | 'admin'
 let currentStudent = null;
 let currentCompany = null;
@@ -67,12 +70,24 @@ function showPortal(role) {
 
 /* ================= auth ================= */
 let authMode = "login";      // 'login' | 'signup'
-let authRole = "student";    // 'student' | 'company'
+let authRole = PATH_ROLE === "company" ? "company" : "student";
 
 function showAuth() { $("#auth-backdrop").classList.add("show"); }
 function hideAuth() { $("#auth-backdrop").classList.remove("show"); }
 
 function renderAuth() {
+  if (PATH_ROLE === "admin") {
+    // admin URL: fixed-credential sign-in only
+    $("#auth-role-student").parentElement.style.display = "none";
+    $("#auth-mode-toggle").style.display = "none";
+    $("#auth-name-row").style.display = "none";
+    $("#auth-company-row").style.display = "none";
+    $("#auth-sector-row").style.display = "none";
+    $("#auth-title").textContent = "Administrator Sign In";
+    $("#auth-submit").textContent = "Sign In";
+    $("#auth-error").textContent = "";
+    return;
+  }
   const signup = authMode === "signup";
   $("#auth-name-row").style.display = signup && authRole === "student" ? "flex" : "none";
   $("#auth-company-row").style.display = signup && authRole === "company" ? "flex" : "none";
@@ -121,6 +136,11 @@ $("#auth-form").addEventListener("submit", async (e) => {
     }
     authToken = res.token;
     localStorage.setItem("atlas_token", authToken);
+    if (res.role !== PATH_ROLE) {
+      // signed in as a different role than this URL: go to the right portal
+      location.href = "/" + res.role;
+      return;
+    }
     hideAuth();
     enterSession(res);
     if (authMode === "signup" && res.role === "student") switchTab("profile");
@@ -151,7 +171,12 @@ function enterSession(p) {
 
 async function initSession() {
   if (authToken) {
-    try { enterSession(await api("/api/auth/me")); return; }
+    try {
+      const p = await api("/api/auth/me");
+      if (p.role !== PATH_ROLE) { location.href = "/" + p.role; return; }
+      enterSession(p);
+      return;
+    }
     catch { authToken = ""; localStorage.removeItem("atlas_token"); }
   }
   renderAuth();
@@ -159,8 +184,7 @@ async function initSession() {
 }
 $("#btn-admin-portal").addEventListener("click", () => {
   if (currentRole === "admin") { switchTab("overview"); return; }
-  alert("Sign in with the administrator account to open the Admin Console.");
-  authMode = "login"; authRole = "student"; renderAuth(); showAuth();
+  location.href = "/admin";
 });
 $("#btn-student-portal").addEventListener("click", () => {});
 
@@ -736,6 +760,7 @@ $("#c-post-form").addEventListener("submit", async (e) => {
       state: $("#cp-state").value, skills_required: csv($("#cp-skills").value),
       min_qualification_level: Number($("#cp-minqual").value),
       capacity: Number($("#cp-capacity").value),
+      stipend: Number($("#cp-stipend").value) || 5000,
     }),
   });
   $("#cp-note").textContent = "Published. Awaiting admin verification.";
