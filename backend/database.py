@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS students (
     home_state TEXT NOT NULL,
     first_generation INTEGER NOT NULL,
     college_tier INTEGER NOT NULL,
-    available_months INTEGER NOT NULL
+    available_months INTEGER NOT NULL,
+    mobile TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS companies (
@@ -188,6 +189,13 @@ def init_db() -> None:
         for statement in schema.split(";"):
             if statement.strip():
                 conn.execute(statement)
+    # additive migrations for databases created before these columns existed
+    for ddl in ("ALTER TABLE students ADD COLUMN mobile TEXT NOT NULL DEFAULT ''",):
+        try:
+            with get_conn() as conn:
+                conn.execute(ddl)
+        except Exception:
+            pass  # column already exists
 
 
 def insert_returning_id(conn, sql: str, params) -> int:

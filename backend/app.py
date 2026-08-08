@@ -149,6 +149,7 @@ class ProfileUpdate(BaseModel):
     preferred_sectors: list[str]
     first_generation: bool
     college_tier: int
+    mobile: str = ""
 
 
 @app.put("/api/students/{student_id}")
@@ -157,14 +158,17 @@ def update_student(student_id: int, item: ProfileUpdate,
     p = principal(authorization)
     if not p or p["role"] != "student" or p["student"]["id"] != student_id:
         raise HTTPException(403, "You can only edit your own profile.")
+    mobile = re.sub(r"[^\d+]", "", item.mobile or "")
+    if mobile and not re.fullmatch(r"(\+91)?[6-9]\d{9}", mobile):
+        raise HTTPException(400, "Please enter a valid 10-digit Indian mobile number.")
     with get_conn() as conn:
         conn.execute(
             "UPDATE students SET skills=?, qualification=?, qualification_level=?,"
             " preferred_locations=?, preferred_sectors=?, first_generation=?,"
-            " college_tier=? WHERE id=?",
+            " college_tier=?, mobile=? WHERE id=?",
             (json.dumps(item.skills), item.qualification, item.qualification_level,
              json.dumps(item.preferred_locations), json.dumps(item.preferred_sectors),
-             int(item.first_generation), item.college_tier, student_id))
+             int(item.first_generation), item.college_tier, mobile, student_id))
         row = conn.execute("SELECT * FROM students WHERE id=?", (student_id,)).fetchone()
     return row_to_student(row)
 
@@ -390,7 +394,8 @@ def company_applicants(authorization: str = Header("")):
             "internship_title": r["internship_title"],
             "student": {"id": s["id"], "name": s["name"],
                         "qualification": s["qualification"], "skills": s["skills"],
-                        "home_state": s["home_state"]},
+                        "home_state": s["home_state"],
+                        "mobile": s.get("mobile", "")},
             "match_pct": round(score["total_score"] * 100),
             "documents": docs.get(s["id"], []),
         })

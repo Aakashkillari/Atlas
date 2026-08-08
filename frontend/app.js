@@ -481,6 +481,19 @@ function fillProfileForm() {
   $("#f-sectors").value = s.preferred_sectors.join(", ");
   $("#f-tier").value = s.college_tier;
   $("#f-firstgen").checked = s.first_generation;
+  $("#f-mobile").value = s.mobile || "";
+}
+// every profile PUT must carry all fields; helper keeps mobile from being wiped
+function profilePayload(overrides) {
+  const s = currentStudent;
+  return JSON.stringify({
+    skills: s.skills, qualification: s.qualification,
+    qualification_level: s.qualification_level,
+    preferred_locations: s.preferred_locations,
+    preferred_sectors: s.preferred_sectors,
+    first_generation: s.first_generation, college_tier: s.college_tier,
+    mobile: s.mobile || "", ...overrides,
+  });
 }
 $("#profile-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -488,15 +501,17 @@ $("#profile-form").addEventListener("submit", async (e) => {
   const csv = (v) => v.split(",").map((x) => x.trim()).filter(Boolean);
   const updated = await api(`/api/students/${currentStudent.id}`, {
     method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    body: profilePayload({
       skills: csv($("#f-skills").value),
       qualification: qual, qualification_level: Number(level),
       preferred_locations: csv($("#f-locations").value),
       preferred_sectors: csv($("#f-sectors").value),
       first_generation: $("#f-firstgen").checked,
       college_tier: Number($("#f-tier").value),
+      mobile: $("#f-mobile").value.trim(),
     }),
-  });
+  }).catch((e) => { $("#profile-saved").textContent = e.message; return null; });
+  if (!updated) return;
   $("#profile-saved").textContent = "Saved. Recommendations refreshed.";
   setTimeout(() => { $("#profile-saved").textContent = ""; }, 3000);
   applyStudent(updated);
@@ -550,6 +565,15 @@ const INTAKE_STEPS = [
     options: () => ["Tier 1", "Tier 2", "Tier 3"],
     parse: (v) => { const m = v.match(/[123]/); return m ? Number(m[0]) : null; },
     error: "Please pick Tier 1, 2 or 3." },
+  { key: "mobile",
+    ask: () => "Finally, would you like to share your mobile number? Companies can use it to contact you about offers. Type it, or tap Skip.",
+    options: () => ["Skip"],
+    parse: (v) => {
+      if (/^skip$/i.test(v.trim())) return "";
+      const digits = v.replace(/[^\d+]/g, "");
+      return /^(\+91)?[6-9]\d{9}$/.test(digits) ? digits : null;
+    },
+    error: "That does not look like a valid 10-digit Indian mobile number. Try again or tap Skip." },
 ];
 
 function startIntake() {
@@ -597,11 +621,12 @@ async function handleIntake(value) {
   const a = intake.answers;
   const updated = await api(`/api/students/${currentStudent.id}`, {
     method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    body: profilePayload({
       skills: a.skills, qualification: a.qualification,
       qualification_level: QUAL_LEVEL(a.qualification),
       preferred_locations: a.locations, preferred_sectors: a.sectors,
       first_generation: a.first_generation, college_tier: a.college_tier,
+      mobile: a.mobile || "",
     }),
   });
   intakeMsg("bot", `All set! Your profile is saved: ${a.qualification}, skills ${a.skills.join(", ")}. Your recommendations are ready on the Dashboard.`);
@@ -670,14 +695,7 @@ $("#resume-upload").addEventListener("click", async () => {
         const merged = [...new Set([...currentStudent.skills, ...res.parsed_skills])];
         const updated = await api(`/api/students/${currentStudent.id}`, {
           method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            skills: merged, qualification: currentStudent.qualification,
-            qualification_level: currentStudent.qualification_level,
-            preferred_locations: currentStudent.preferred_locations,
-            preferred_sectors: currentStudent.preferred_sectors,
-            first_generation: currentStudent.first_generation,
-            college_tier: currentStudent.college_tier,
-          }),
+          body: profilePayload({ skills: merged }),
         });
         box.innerHTML = "Skills added to your profile. Recommendations refreshed.";
         applyStudent(updated);
@@ -798,7 +816,8 @@ async function loadCompanyApplicants() {
   const apps = await api("/api/company/applicants");
   $("#c-apps-tbody").innerHTML = apps.length ? apps.map((a) => `
     <tr>
-      <td class="td-strong">${esc(a.student.name)}<br><span class="td-muted" style="font-size:0.74rem">${esc(a.student.qualification)}</span></td>
+      <td class="td-strong">${esc(a.student.name)}<br>
+        <span class="td-muted" style="font-size:0.74rem">${esc(a.student.qualification)}${a.student.mobile ? " &middot; " + esc(a.student.mobile) : ""}</span></td>
       <td>${esc(a.internship_title)}</td>
       <td>${a.student.skills.slice(0, 3).map((s) => `<span class="sector-tag">${esc(s)}</span>`).join(" ")}</td>
       <td><span class="score-chip">${a.match_pct}%</span></td>
