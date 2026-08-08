@@ -865,22 +865,6 @@ async function loadCompanyApplicants() {
 }
 
 /* ================= admin ================= */
-const NATIONAL_FUNNEL = [
-  ["Opportunities Posted", 127000, "var(--navy)"],
-  ["Applications Received", 621000, "var(--saffron)"],
-  ["Offers Made", 82340, "var(--navy)"],
-  ["Offers Accepted", 28150, "#9ca3af"],
-  ["Actually Joined", 8712, "var(--green)"],
-];
-function renderFunnel() {
-  const max = Math.max(...NATIONAL_FUNNEL.map((f) => f[1]));
-  $("#funnel").innerHTML = NATIONAL_FUNNEL.map(([label, num, color]) => `
-    <div class="funnel-row">
-      <div class="funnel-top"><span>${label}</span><span class="funnel-num">${num.toLocaleString("en-IN")}</span></div>
-      <div class="funnel-track"><div class="funnel-fill" style="width:${Math.max(2, (num / max) * 100)}%; background:${color}"></div></div>
-    </div>`).join("");
-}
-
 async function loadAdminStats() {
   const s = await api("/api/admin/stats");
   const cards = [
@@ -950,26 +934,15 @@ async function loadFairness() {
     $("#alloc-result").style.display = "none";
     return;
   }
-  const groups = {
-    "General / Tier-1 College Applicants": (m) => !m.first_generation && m.college_tier === 1,
-    "Tier-2 / Tier-3 College Applicants": (m) => m.college_tier >= 2,
-    "First-Generation Applicants": (m) => m.first_generation,
-  };
-  let html = "";
-  for (const [name, pred] of Object.entries(groups)) {
-    const ms = data.matches.filter(pred);
-    if (!ms.length) continue;
-    const adj = ms.reduce((a, m) => a + m.total_score, 0) / ms.length;
-    const raw = ms.reduce((a, m) => a + m.total_score / m.fairness_boost, 0) / ms.length;
-    html += `<div class="fair-group"><div class="fair-name">${name}</div>
-      <div class="fair-row"><span>Raw ${Math.round(raw * 100)}</span>
-        <div class="fair-track"><div class="fair-fill-raw" style="width:${Math.round(raw * 100)}%"></div></div><span></span></div>
-      <div class="fair-row"><span></span>
-        <div class="fair-track"><div class="fair-fill-adj" style="width:${Math.round(adj * 100)}%"></div></div>
-        <span><strong>Adj. ${Math.round(adj * 100)}</strong></span></div>
-    </div>`;
-  }
-  $("#fairness-bars").innerHTML = html || `<p class="sub-line">Waiting for allocations.</p>`;
+  $("#fairness-bars").innerHTML = `
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Student</th><th>Allocated To</th><th>Company</th><th>Match</th></tr></thead>
+      <tbody>${data.matches.slice(0, 12).map((m) => `<tr>
+        <td class="td-strong">${esc(m.student_name)}</td>
+        <td>${esc(m.internship_title)}</td>
+        <td>${esc(m.company)}</td>
+        <td><span class="score-chip">${Math.round(m.total_score * 100)}%</span></td>
+      </tr>`).join("")}</tbody></table></div>`;
   const sm = data.summary;
   $("#alloc-result").style.display = "block";
   $("#alloc-result-body").innerHTML = `
@@ -1214,5 +1187,4 @@ const SECTOR_LIST = ["IT & Software", "Banking & Finance", "Manufacturing",
   "Energy", "Healthcare & Pharma", "Retail & FMCG"];
 $("#rec-sector").innerHTML += SECTOR_LIST.map((s) => `<option>${s}</option>`).join("");
 
-renderFunnel();
 initSession();
