@@ -751,7 +751,14 @@ $("#complaint-form").addEventListener("submit", async (e) => {
 async function loadCompanyDash() {
   const data = await api("/api/company/me");
   const c = data.company;
+  currentCompany = c;
   const verified = data.listings.filter((j) => j.status === "Verified").length;
+  const banner = c.status === "Pending"
+    ? `<div class="cold-note" style="margin-top:16px">Your company account is awaiting approval by the scheme administrator. You will be notified here once approved; posting is enabled after that.</div>`
+    : c.status === "Suspended"
+    ? `<div class="cold-note" style="margin-top:16px">Your company account is suspended. Contact the scheme administrator.</div>` : "";
+  document.querySelectorAll("#tab-c-dash .cold-note").forEach((el) => el.remove());
+  if (banner) $("#c-stats").insertAdjacentHTML("beforebegin", banner);
   $("#c-stats").innerHTML = `
     <div class="scard"><div class="scard-top"><div class="scard-ico ico-blue"><svg class="ico"><use href="#i-briefcase"/></svg></div>
       <span class="scard-label">Listings</span></div><div class="scard-value">${data.listings.length}</div></div>
@@ -976,10 +983,18 @@ async function loadAdminCompanies() {
       <td class="td-strong">${esc(c.name)}</td>
       <td>${esc(c.sector)}</td>
       <td>${c.listings}</td>
-      <td>${c.status === "Active" ? `<span class="badge-verified">ACTIVE</span>` : `<span class="st-badge st-rejected">SUSPENDED</span>`}</td>
-      <td><button class="mini-btn ${c.status === "Active" ? "mini-red" : "mini-green"}"
-        data-cid="${c.id}" data-newstatus="${c.status === "Active" ? "Suspended" : "Active"}">
-        ${c.status === "Active" ? "Suspend" : "Activate"}</button></td>
+      <td>${c.status === "Active" ? `<span class="badge-verified">ACTIVE</span>`
+          : c.status === "Pending" ? `<span class="st-badge st-shortlisted">PENDING APPROVAL</span>`
+          : `<span class="st-badge st-rejected">SUSPENDED</span>`}</td>
+      <td>
+        ${c.status === "Pending" ? `
+          <button class="mini-btn mini-green" data-cid="${c.id}" data-newstatus="Active">Approve</button>
+          <button class="mini-btn mini-red" data-cid="${c.id}" data-newstatus="Suspended">Reject</button>` : ""}
+        ${c.status === "Active" ? `
+          <button class="mini-btn mini-red" data-cid="${c.id}" data-newstatus="Suspended">Suspend</button>` : ""}
+        ${c.status === "Suspended" ? `
+          <button class="mini-btn mini-green" data-cid="${c.id}" data-newstatus="Active">Activate</button>` : ""}
+      </td>
     </tr>`).join("");
   document.querySelectorAll("#admin-companies-tbody [data-cid]").forEach((b) =>
     b.addEventListener("click", async () => {

@@ -338,6 +338,12 @@ def company_me(authorization: str = Header("")):
 def company_post_internship(item: CompanyInternship, authorization: str = Header("")):
     p = require_role(authorization, "company")
     c = p["company"]
+    if c["status"] == "Pending":
+        raise HTTPException(403, "Your company account is awaiting admin approval. "
+                                 "You can post listings once approved.")
+    if c["status"] == "Suspended":
+        raise HTTPException(403, "Your company account is suspended. Contact the "
+                                 "scheme administrator.")
     desc = item.description or (
         f"{item.title} at {c['name']}, {item.location}. Work on "
         f"{', '.join(item.skills_required[:3])} under the PM Internship Scheme.")
@@ -549,11 +555,14 @@ def admin_companies(authorization: str = Header("")):
 @app.patch("/api/admin/companies/{cid}/status")
 def set_company_status(cid: int, item: StatusBody, authorization: str = Header("")):
     require_role(authorization, "admin")
-    if item.status not in ("Active", "Suspended"):
-        raise HTTPException(400, "Status must be Active or Suspended")
+    if item.status not in ("Active", "Suspended", "Pending"):
+        raise HTTPException(400, "Status must be Active, Suspended or Pending")
     with get_conn() as conn:
         conn.execute("UPDATE companies SET status=? WHERE id=?", (item.status, cid))
-        notify(conn, "company", cid, f"Your company account is now {item.status}.", "")
+        text = ("Your company account has been approved. You can now post internships."
+                if item.status == "Active"
+                else f"Your company account is now {item.status}.")
+        notify(conn, "company", cid, text, "c-dash")
     return {"ok": True}
 
 

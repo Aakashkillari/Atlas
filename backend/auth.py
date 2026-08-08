@@ -75,11 +75,12 @@ def company_signup(company_name: str, sector: str, email: str, password: str) ->
         if existing:
             company_id = existing["id"]
         else:
+            # new companies await admin approval before they can post
             company_id = insert_returning_id(
                 conn,
                 "INSERT INTO companies (name, sector, about, status, created_at)"
                 " VALUES (?,?,?,?,?)",
-                (company_name.strip(), sector, "", "Active", now))
+                (company_name.strip(), sector, "", "Pending", now))
         _create_user(conn, email, password, "company", company_id=company_id)
     return login(email, password)
 
