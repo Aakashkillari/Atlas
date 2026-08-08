@@ -108,7 +108,8 @@ CREATE TABLE IF NOT EXISTS documents (
     filename TEXT NOT NULL,
     stored_path TEXT NOT NULL,
     uploaded_at TEXT NOT NULL,
-    parsed_skills TEXT NOT NULL DEFAULT '[]'
+    parsed_skills TEXT NOT NULL DEFAULT '[]',
+    content {BLOB}
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -183,14 +184,16 @@ def get_conn():
 
 def init_db() -> None:
     pk = "SERIAL PRIMARY KEY" if IS_PG else "INTEGER PRIMARY KEY"
-    schema = SCHEMA.replace("{PK}", pk)
+    blob = "BYTEA" if IS_PG else "BLOB"
+    schema = SCHEMA.replace("{PK}", pk).replace("{BLOB}", blob)
     UPLOADS_DIR.mkdir(exist_ok=True)
     with get_conn() as conn:
         for statement in schema.split(";"):
             if statement.strip():
                 conn.execute(statement)
     # additive migrations for databases created before these columns existed
-    for ddl in ("ALTER TABLE students ADD COLUMN mobile TEXT NOT NULL DEFAULT ''",):
+    for ddl in ("ALTER TABLE students ADD COLUMN mobile TEXT NOT NULL DEFAULT ''",
+                f"ALTER TABLE documents ADD COLUMN content {blob}"):
         try:
             with get_conn() as conn:
                 conn.execute(ddl)

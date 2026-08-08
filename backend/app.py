@@ -380,7 +380,7 @@ def company_applicants(authorization: str = Header("")):
             " JOIN internships i ON i.id = a.internship_id"
             " WHERE i.company_id=? ORDER BY a.applied_at DESC", (c["id"],)).fetchall()
         docs = {}
-        for d in conn.execute("SELECT * FROM documents"):
+        for d in conn.execute("SELECT id, student_id, filename FROM documents"):
             docs.setdefault(d["student_id"], []).append(
                 {"id": d["id"], "filename": d["filename"]})
         internships = {j["id"]: j for j in load_internships(include_suspended=True)}
@@ -435,6 +435,8 @@ async def upload_document(file: UploadFile = File(...), authorization: str = Hea
     data = await file.read()
     if len(data) > 5 * 1024 * 1024:
         raise HTTPException(400, "File too large (max 5 MB).")
+    # parse from a temp file, but persist the bytes in the database so
+    # resumes survive ephemeral hosting (Render) and live with Neon data
     stored = f"{p['student']['id']}_{secrets.token_hex(6)}.pdf"
     path = UPLOADS_DIR / stored
     path.write_bytes(data)
@@ -443,9 +445,9 @@ async def upload_document(file: UploadFile = File(...), authorization: str = Hea
         doc_id = insert_returning_id(
             conn,
             "INSERT INTO documents (student_id, filename, stored_path, uploaded_at,"
-            " parsed_skills) VALUES (?,?,?,?,?)",
+            " parsed_skills, content) VALUES (?,?,?,?,?,?)",
             (p["student"]["id"], file.filename, stored,
-             datetime.now(timezone.utc).isoformat(), json.dumps(skills)))
+             datetime.now(timezone.utc).isoformat(), json.dumps(skills), data))
     return {"id": doc_id, "filename": file.filename, "parsed_skills": skills}
 
 
@@ -473,6 +475,13 @@ def download_document(doc_id: int, authorization: str = Header(""),
     is_owner = p["role"] == "student" and p["student"] and p["student"]["id"] == d["student_id"]
     if not (is_owner or p["role"] in ("admin", "company")):
         raise HTTPException(403, "Not allowed.")
+    content = d["content"] if "content" in d.keys() else None
+    if content:
+        from fastapi.responses import Response
+        return Response(bytes(content), media_type="application/pdf",
+                        headers={"Content-Disposition":
+                                 f'inline; filename="{d["filename"]}"'})
+    # legacy rows stored on disk only
     return FileResponse(UPLOADS_DIR / d["stored_path"], filename=d["filename"],
                         media_type="application/pdf")
 
