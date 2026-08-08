@@ -33,7 +33,7 @@ const STUDENT_TABS = ["dashboard", "profile", "explore", "applications",
   "messages", "documents", "skills", "help", "coming"];
 const COMPANY_TABS = ["c-dash", "c-post", "c-applicants", "messages"];
 const ADMIN_TABS = ["overview", "admin-students", "admin-companies",
-  "admin-apps", "listings", "admin-complaints"];
+  "admin-apps", "listings", "admin-complaints", "admin-fairness"];
 
 function switchTab(tab) {
   document.querySelectorAll(".tab-view").forEach((v) => v.classList.remove("active"));
@@ -59,6 +59,7 @@ function switchTab(tab) {
   if (tab === "admin-apps") loadAdminApps();
   if (tab === "listings") loadListings();
   if (tab === "admin-complaints") loadAdminComplaints();
+  if (tab === "admin-fairness") loadFairnessMonitor();
 }
 document.querySelectorAll(".nav-tab").forEach((b) =>
   b.addEventListener("click", () => switchTab(b.dataset.tab)));
@@ -951,6 +952,37 @@ async function loadFairness() {
     <div class="tl-item"><div class="tl-dot tl-saffron"></div><div><div class="tl-title">Average match ${Math.round(sm.avg_match_score * 100)}%</div>
       <div class="tl-date">${sm.equity_placements} equity placements</div></div></div>`;
 }
+async function loadFairnessMonitor() {
+  const data = await api("/api/allocation");
+  if (!data.matches.length) {
+    $("#fairness-monitor").innerHTML =
+      `<div class="cold-note">No allocation run yet. Run the Allocation Engine from the Overview tab, then return here.</div>`;
+    return;
+  }
+  const groups = {
+    "General / Tier-1 College Applicants": (m) => !m.first_generation && m.college_tier === 1,
+    "Tier-2 / Tier-3 College Applicants": (m) => m.college_tier >= 2,
+    "First-Generation Applicants": (m) => m.first_generation,
+  };
+  let html = "";
+  for (const [name, pred] of Object.entries(groups)) {
+    const ms = data.matches.filter(pred);
+    if (!ms.length) continue;
+    const adj = ms.reduce((a, m) => a + m.total_score, 0) / ms.length;
+    const raw = ms.reduce((a, m) => a + m.total_score / m.fairness_boost, 0) / ms.length;
+    html += `<div class="fair-group"><div class="fair-name">${name}
+        <span class="td-muted" style="font-weight:600; font-size:0.74rem">(${ms.length} student${ms.length > 1 ? "s" : ""})</span></div>
+      <div class="fair-row"><span>Before ${Math.round(raw * 100)}%</span>
+        <div class="fair-track"><div class="fair-fill-raw" style="width:${Math.round(raw * 100)}%"></div></div><span></span></div>
+      <div class="fair-row"><span>After ${Math.round(adj * 100)}%</span>
+        <div class="fair-track"><div class="fair-fill-adj" style="width:${Math.round(adj * 100)}%"></div></div>
+        <span><strong style="color:var(--green)">+${Math.max(0, Math.round((adj - raw) * 100))}</strong></span></div>
+    </div>`;
+  }
+  $("#fairness-monitor").innerHTML = html
+    || `<p class="sub-line">The current allocation has no applicants in the tracked groups yet.</p>`;
+}
+
 $("#run-allocation").addEventListener("click", async () => {
   const btn = $("#run-allocation");
   btn.disabled = true; btn.textContent = "Running allocation engine...";

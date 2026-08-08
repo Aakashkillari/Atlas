@@ -474,6 +474,7 @@
           <button class="pill nav-tab" data-tab="admin-apps" data-i18n="applications">Applications</button>
           <button class="pill nav-tab" data-tab="listings" data-i18n="listings">Listings</button>
           <button class="pill nav-tab" data-tab="admin-complaints" data-i18n="complaints">Complaints</button>
+          <button class="pill nav-tab" data-tab="admin-fairness" data-i18n="fairness">Fairness</button>
         </div>
         <div class="panel">
           <div class="panel-head">
@@ -555,6 +556,31 @@
               <tbody id="admin-complaints-tbody"></tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      <section id="tab-admin-fairness" class="tab-view">
+        <div class="dash-grid">
+          <div class="dash-main">
+            <div class="panel">
+              <div class="panel-head">
+                <div><h2 data-i18n="fairnessAudit">Fairness Audit</h2>
+                <p class="sub-line" data-i18n="fairnessAuditSub">Average match score per applicant group, before and after the scheme's equity adjustment. Computed from the latest allocation run.</p></div>
+              </div>
+              <div id="fairness-monitor"></div>
+            </div>
+          </div>
+          <aside class="dash-side">
+            <div class="panel">
+              <h2 data-i18n="howFairness">How the fairness layer works</h2>
+              <ol class="pipeline-list" style="margin-top:12px">
+                <li><strong>The problem it solves</strong><span>Students from smaller colleges or first-generation families often have shorter, simpler profiles. A plain algorithm quietly ranks them lower, even when they genuinely fit the role.</span></li>
+                <li><strong>The adjustment</strong><span>ATLAS gives a small, fixed uplift: +5% for first-generation students and +3-5% for tier-2/3 colleges, exactly as the scheme's affirmative-action policy requires. It never lowers anyone's score.</span></li>
+                <li><strong>The proof</strong><span>The grey bar shows each group's average score before the uplift; the green bar shows it after. Fair means the gaps shrink, not that anyone is pushed down.</span></li>
+                <li><strong>The audit trail</strong><span>Every match records its exact uplift and reasoning, so any allocation can be explained and challenged. Nothing is a black box.</span></li>
+              </ol>
+            </div>
+          </aside>
         </div>
       </section>
 
