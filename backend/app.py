@@ -809,6 +809,11 @@ def index():
     return RedirectResponse("/student")
 
 
+@app.get("/favicon.ico")
+def favicon():
+    return FileResponse(FRONTEND / "logo.png", media_type="image/png")
+
+
 @app.get("/student")
 @app.get("/company")
 @app.get("/admin")
