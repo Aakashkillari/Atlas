@@ -12,10 +12,13 @@ const api = (path, opts = {}) => {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-let authToken = localStorage.getItem("atlas_token") || "";
 // which portal this URL is for: /student, /company, /admin
 const PATH_ROLE = ["student", "company", "admin"].includes(location.pathname.replace(/\//g, ""))
   ? location.pathname.replace(/\//g, "") : "student";
+// one persistent session PER PORTAL, so student/company/admin can all stay
+// signed in at the same time (three tabs work independently)
+const TOKEN_KEY = "atlas_token_" + PATH_ROLE;
+let authToken = localStorage.getItem(TOKEN_KEY) || "";
 let currentRole = null;      // 'student' | 'company' | 'admin'
 let currentStudent = null;
 let currentCompany = null;
@@ -134,13 +137,15 @@ $("#auth-form").addEventListener("submit", async (e) => {
           password: $("#auth-password").value }),
       });
     }
-    authToken = res.token;
-    localStorage.setItem("atlas_token", authToken);
+    // store the session under the portal that matches its role
+    localStorage.setItem("atlas_token_" + res.role, res.token);
     if (res.role !== PATH_ROLE) {
       // signed in as a different role than this URL: go to the right portal
+      // (already signed in there; no second login needed)
       location.href = "/" + res.role;
       return;
     }
+    authToken = res.token;
     hideAuth();
     enterSession(res);
     if (authMode === "signup" && res.role === "student") switchTab("profile");
@@ -150,7 +155,7 @@ $("#auth-form").addEventListener("submit", async (e) => {
 $("#logout-btn").addEventListener("click", async () => {
   await api("/api/auth/logout", { method: "POST" }).catch(() => {});
   authToken = "";
-  localStorage.removeItem("atlas_token");
+  localStorage.removeItem(TOKEN_KEY);
   location.reload();
 });
 
@@ -170,14 +175,24 @@ function enterSession(p) {
 }
 
 async function initSession() {
+  // migrate a session stored under the old single-token key
+  const legacy = localStorage.getItem("atlas_token");
+  if (!authToken && legacy) { authToken = legacy; localStorage.removeItem("atlas_token"); }
   if (authToken) {
     try {
       const p = await api("/api/auth/me");
-      if (p.role !== PATH_ROLE) { location.href = "/" + p.role; return; }
+      if (p.role !== PATH_ROLE) {
+        // this session belongs to another portal: move it there and stay signed in
+        localStorage.setItem("atlas_token_" + p.role, authToken);
+        localStorage.removeItem(TOKEN_KEY);
+        location.href = "/" + p.role;
+        return;
+      }
+      localStorage.setItem(TOKEN_KEY, authToken);
       enterSession(p);
       return;
     }
-    catch { authToken = ""; localStorage.removeItem("atlas_token"); }
+    catch { authToken = ""; localStorage.removeItem(TOKEN_KEY); }
   }
   renderAuth();
   showAuth();
