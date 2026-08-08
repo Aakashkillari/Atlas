@@ -620,7 +620,11 @@ $("#intake-input").addEventListener("keydown", (e) => {
 
 /* ================= messages / notifications ================= */
 async function loadMessages(markRead) {
-  if (!authToken || currentRole === "admin") return;
+  if (!authToken || currentRole === "admin") {
+    const dot = document.querySelector(".bell-dot");
+    if (dot) dot.style.display = "none";
+    return;
+  }
   const data = await api("/api/notifications").catch(() => ({ unread: 0, items: [] }));
   const badge = currentRole === "company" ? $("#msg-badge-c") : $("#msg-badge");
   const dot = document.querySelector(".bell-dot");

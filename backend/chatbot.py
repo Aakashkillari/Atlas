@@ -93,17 +93,29 @@ def answer(query: str, internships: list[dict], student: dict | None = None,
                                 if student["first_generation"] or student["college_tier"] >= 2 else ""),
                     "internships": []}
 
-        if re.search(r"\b(my application|my status|my offer|track|applied)\b", q):
+        if re.search(r"\b(my application|my status|my offer|track|applied|"
+                     r"application status|status of)\b", q) \
+                or re.search(r"\b(which|what|how many)\b.*\bappl", q):
             if not applications:
-                return {"reply": "You have no applications yet. Apply from the Dashboard "
-                                 "or Explore Internships; there is no cap on applications.",
+                return {"reply": "You have not applied to any internships yet. Apply "
+                                 "from the Dashboard or Explore Internships; there is "
+                                 "no cap on applications.",
                         "internships": []}
-            lines = [f"{a['internship']['title']} at {a['internship']['company']}: {a['status']}"
-                     for a in applications[:3]]
+            lines = [f"{a['internship']['title']} at {a['internship']['company']} "
+                     f"({a['internship']['location']}): {a['status']}"
+                     for a in applications[:6]]
+            companies = sorted({a["internship"]["company"] for a in applications})
             offers = sum(1 for a in applications if a["status"] == "Offer Sent")
-            extra = f" You have {offers} offer(s) awaiting your response!" if offers else ""
-            return {"reply": "Your applications: " + "; ".join(lines) + "." + extra,
-                    "internships": []}
+            accepted = sum(1 for a in applications if a["status"] == "Accepted")
+            extra = ""
+            if offers:
+                extra += f" You have {offers} offer(s) awaiting your response."
+            if accepted:
+                extra += " Congratulations on your accepted offer!"
+            return {"reply": f"You have applied to {len(applications)} internship(s) "
+                             f"across {', '.join(companies)}. Details: "
+                             + "; ".join(lines) + "." + extra,
+                    "internships": [a["internship"]["id"] for a in applications[:5]]}
 
     for pattern, reply in FAQ:
         if re.search(pattern, q):
