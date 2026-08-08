@@ -2,8 +2,7 @@
 
 SQLite keeps local development zero-setup. Setting DATABASE_URL (a Neon or
 Supabase Postgres connection string) switches the same schema and queries to
-Postgres for persistent cloud deployments. Queries are written with `?`
-placeholders and translated for Postgres automatically.
+Postgres. Queries use `?` placeholders and are translated automatically.
 """
 import json
 import os
@@ -11,6 +10,7 @@ import sqlite3
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent / "atlas.db"
+UPLOADS_DIR = Path(__file__).resolve().parent.parent / "uploads"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 IS_PG = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS students (
     available_months INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS companies (
+    id {PK},
+    name TEXT NOT NULL UNIQUE,
+    sector TEXT NOT NULL,
+    about TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS internships (
     id {PK},
     title TEXT NOT NULL,
@@ -48,7 +57,9 @@ CREATE TABLE IF NOT EXISTS internships (
     verified INTEGER NOT NULL,
     description TEXT NOT NULL,
     company_about TEXT NOT NULL DEFAULT '',
-    assessment_stages TEXT NOT NULL DEFAULT '[]'
+    assessment_stages TEXT NOT NULL DEFAULT '[]',
+    company_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'Verified'
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -56,7 +67,9 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     salt TEXT NOT NULL,
-    student_id INTEGER NOT NULL REFERENCES students(id),
+    student_id INTEGER,
+    company_id INTEGER,
+    role TEXT NOT NULL DEFAULT 'student',
     created_at TEXT NOT NULL
 );
 
@@ -86,6 +99,34 @@ CREATE TABLE IF NOT EXISTS allocations (
     sector_score REAL NOT NULL,
     fairness_boost REAL NOT NULL,
     explanation TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS documents (
+    id {PK},
+    student_id INTEGER NOT NULL REFERENCES students(id),
+    filename TEXT NOT NULL,
+    stored_path TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL,
+    parsed_skills TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id {PK},
+    role TEXT NOT NULL,
+    recipient_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    tab TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    read INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS complaints (
+    id {PK},
+    student_id INTEGER NOT NULL REFERENCES students(id),
+    subject TEXT NOT NULL,
+    details TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Open',
+    created_at TEXT NOT NULL
 );
 """
 
@@ -142,6 +183,7 @@ def get_conn():
 def init_db() -> None:
     pk = "SERIAL PRIMARY KEY" if IS_PG else "INTEGER PRIMARY KEY"
     schema = SCHEMA.replace("{PK}", pk)
+    UPLOADS_DIR.mkdir(exist_ok=True)
     with get_conn() as conn:
         for statement in schema.split(";"):
             if statement.strip():
@@ -149,20 +191,27 @@ def init_db() -> None:
 
 
 def insert_returning_id(conn, sql: str, params) -> int:
-    """INSERT and return the new row id on both backends."""
     if IS_PG:
         return conn.execute(sql + " RETURNING id", params).fetchone()["id"]
     return conn.execute(sql, params).lastrowid
 
 
 def sync_sequences(conn) -> None:
-    """After seeding explicit ids on Postgres, advance the serial sequences."""
     if not IS_PG:
         return
-    for table in ("students", "internships", "applications", "allocations", "users"):
+    for table in ("students", "internships", "applications", "allocations",
+                  "users", "companies", "documents", "notifications", "complaints"):
         conn.execute(
             f"SELECT setval(pg_get_serial_sequence('{table}', 'id'),"
             f" COALESCE((SELECT MAX(id) FROM {table}), 1))")
+
+
+def notify(conn, role: str, recipient_id: int, text: str, tab: str = "") -> None:
+    from datetime import datetime, timezone
+    conn.execute(
+        "INSERT INTO notifications (role, recipient_id, text, tab, created_at)"
+        " VALUES (?,?,?,?,?)",
+        (role, recipient_id, text, tab, datetime.now(timezone.utc).isoformat()))
 
 
 def row_to_student(row) -> dict:

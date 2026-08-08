@@ -18,8 +18,8 @@ FAQ = [
      "PM Internship Scheme internships run for 12 months. ATLAS checks your "
      "availability before recommending a role."),
     (r"\b(apply|application|how do i|limit)\b",
-     "You can hold up to 3 active applications at a time. Open any internship "
-     "card and press Apply Now. You can track status in My Applications."),
+     "Open any internship card and press Apply Now. You can apply to as many "
+     "internships as you like and track every status in My Applications."),
     (r"\b(offer|accept|deadline|window)\b",
      "Once an offer is made you have 14 days to accept it. You can hold a "
      "maximum of 2 active offers at a time."),
@@ -95,8 +95,8 @@ def answer(query: str, internships: list[dict], student: dict | None = None,
 
         if re.search(r"\b(my application|my status|my offer|track|applied)\b", q):
             if not applications:
-                return {"reply": "You have no applications yet. You can hold up to 3 active "
-                                 "applications; apply from the Dashboard or Explore Internships.",
+                return {"reply": "You have no applications yet. Apply from the Dashboard "
+                                 "or Explore Internships; there is no cap on applications.",
                         "internships": []}
             lines = [f"{a['internship']['title']} at {a['internship']['company']}: {a['status']}"
                      for a in applications[:3]]

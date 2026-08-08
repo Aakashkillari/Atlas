@@ -1,186 +1,188 @@
-/* ATLAS portal front end. Vanilla JS, no build step. */
+/* ATLAS portal front end: student, company, and admin roles. */
 const $ = (s) => document.querySelector(s);
-const api = (path, opts) => fetch(path, opts).then(async (r) => {
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail || r.statusText);
-  return data;
-});
+const api = (path, opts = {}) => {
+  const headers = { ...(opts.headers || {}) };
+  if (authToken) headers.Authorization = "Bearer " + authToken;
+  return fetch(path, { ...opts, headers }).then(async (r) => {
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : r.statusText);
+    return data;
+  });
+};
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-let currentStudent = null;
-let internshipCache = {};
 let authToken = localStorage.getItem("atlas_token") || "";
-let adminToken = localStorage.getItem("atlas_admin_token") || "";
-let demoMode = false;
-const adminApi = (path, opts = {}) => api(path, {
-  ...opts,
-  headers: { ...(opts.headers || {}), Authorization: "Bearer " + adminToken },
-});
+let currentRole = null;      // 'student' | 'company' | 'admin'
+let currentStudent = null;
+let currentCompany = null;
+let internshipCache = {};
 
-/* ================= authentication ================= */
-let authMode = "login";
+/* ================= navigation ================= */
+const STUDENT_TABS = ["dashboard", "profile", "explore", "applications",
+  "messages", "documents", "skills", "help", "coming"];
+const COMPANY_TABS = ["c-dash", "c-post", "c-applicants", "messages"];
+const ADMIN_TABS = ["overview", "admin-students", "admin-companies",
+  "admin-apps", "listings", "admin-complaints"];
+
+function switchTab(tab) {
+  document.querySelectorAll(".tab-view").forEach((v) => v.classList.remove("active"));
+  document.querySelectorAll(".nav-tab").forEach((b) =>
+    b.classList.toggle("active", b.dataset.tab === tab));
+  const view = $("#tab-" + tab);
+  if (!view) return;
+  view.classList.add("active");
+  if (ADMIN_TABS.includes(tab)) view.prepend($("#nav-admin"));
+  // per-tab loaders
+  if (tab === "explore") loadExplore();
+  if (tab === "applications") loadApplications();
+  if (tab === "messages") loadMessages(true);
+  if (tab === "documents") loadDocuments();
+  if (tab === "skills") loadSkillAnalytics();
+  if (tab === "help") renderFaq();
+  if (tab === "c-dash") loadCompanyDash();
+  if (tab === "c-applicants") loadCompanyApplicants();
+  if (tab === "overview") { loadAdminStats(); loadFairness(); loadInsights(); loadLivePmis(); }
+  if (tab === "admin-students") loadAdminStudents();
+  if (tab === "admin-companies") loadAdminCompanies();
+  if (tab === "admin-apps") loadAdminApps();
+  if (tab === "listings") loadListings();
+  if (tab === "admin-complaints") loadAdminComplaints();
+}
+document.querySelectorAll(".nav-tab").forEach((b) =>
+  b.addEventListener("click", () => switchTab(b.dataset.tab)));
+document.querySelectorAll("[data-goto]").forEach((b) =>
+  b.addEventListener("click", () => switchTab(b.dataset.goto)));
+
+function showPortal(role) {
+  currentRole = role;
+  $("#nav-student").style.display = role === "student" ? "" : "none";
+  $("#nav-company").style.display = role === "company" ? "" : "none";
+  $("#user-role-label").textContent =
+    role === "admin" ? "Administrator" : role === "company" ? "Company" : "Student";
+  if (role === "student") switchTab("dashboard");
+  if (role === "company") switchTab("c-dash");
+  if (role === "admin") { $("#nav-student").style.display = "none"; switchTab("overview"); }
+}
+
+/* ================= auth ================= */
+let authMode = "login";      // 'login' | 'signup'
+let authRole = "student";    // 'student' | 'company'
+
 function showAuth() { $("#auth-backdrop").classList.add("show"); }
 function hideAuth() { $("#auth-backdrop").classList.remove("show"); }
-function setAuthMode(mode) {
-  authMode = mode;
-  $("#auth-name-row").style.display = mode === "signup" ? "flex" : "none";
-  $("#auth-name").required = mode === "signup";
-  $("#auth-title").textContent = mode === "signup" ? "Create Student Account"
-    : mode === "admin" ? "Admin Sign In" : "Student Sign In";
-  $("#auth-submit").textContent = mode === "signup" ? "Create Account" : "Sign In";
-  $("#auth-mode-toggle").style.display = mode === "admin" ? "none" : "";
-  $("#auth-demo").style.display = mode === "admin" ? "none" : "";
-  $("#auth-mode-toggle").textContent = mode === "signup"
+
+function renderAuth() {
+  const signup = authMode === "signup";
+  $("#auth-name-row").style.display = signup && authRole === "student" ? "flex" : "none";
+  $("#auth-company-row").style.display = signup && authRole === "company" ? "flex" : "none";
+  $("#auth-sector-row").style.display = signup && authRole === "company" ? "flex" : "none";
+  $("#auth-name").required = signup && authRole === "student";
+  $("#auth-company").required = signup && authRole === "company";
+  $("#auth-title").textContent =
+    (authRole === "company" ? "Company " : "Student ") + (signup ? "Registration" : "Sign In");
+  $("#auth-submit").textContent = signup ? "Create Account" : "Sign In";
+  $("#auth-mode-toggle").textContent = signup
     ? "Already registered? Sign in" : "New here? Create an account";
+  $("#auth-role-student").classList.toggle("active", authRole === "student");
+  $("#auth-role-company").classList.toggle("active", authRole === "company");
   $("#auth-error").textContent = "";
 }
-$("#auth-mode-toggle").addEventListener("click", () =>
-  setAuthMode(authMode === "login" ? "signup" : "login"));
+$("#auth-role-student").addEventListener("click", () => { authRole = "student"; renderAuth(); });
+$("#auth-role-company").addEventListener("click", () => { authRole = "company"; renderAuth(); });
+$("#auth-mode-toggle").addEventListener("click", () => {
+  authMode = authMode === "login" ? "signup" : "login"; renderAuth();
+});
+
 $("#auth-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("#auth-error").textContent = "";
   try {
-    const path = authMode === "signup" ? "/api/auth/signup" : "/api/auth/login";
-    const body = { email: $("#auth-email").value, password: $("#auth-password").value };
-    if (authMode === "signup") body.name = $("#auth-name").value;
-    const res = await api(path, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (res.admin) {
-      if (authMode !== "admin") { $("#auth-error").textContent = "Use the Admin Console button to sign in as admin."; return; }
-      adminToken = res.token;
-      localStorage.setItem("atlas_admin_token", adminToken);
-      hideAuth();
-      switchPortal("admin");
-      return;
+    let res;
+    if (authMode === "signup" && authRole === "company") {
+      res = await api("/api/auth/company/signup", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company_name: $("#auth-company").value, sector: $("#auth-sector").value,
+          email: $("#auth-email").value, password: $("#auth-password").value }),
+      });
+    } else if (authMode === "signup") {
+      res = await api("/api/auth/signup", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: $("#auth-name").value,
+          email: $("#auth-email").value, password: $("#auth-password").value }),
+      });
+    } else {
+      res = await api("/api/auth/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: $("#auth-email").value,
+          password: $("#auth-password").value }),
+      });
     }
-    if (authMode === "admin") { $("#auth-error").textContent = "Invalid admin credentials."; return; }
     authToken = res.token;
     localStorage.setItem("atlas_token", authToken);
-    demoMode = false;
     hideAuth();
-    enterSignedIn(res.student);
-    if (authMode === "signup") switchTab("student", "profile");
+    enterSession(res);
+    if (authMode === "signup" && res.role === "student") switchTab("profile");
   } catch (err) { $("#auth-error").textContent = err.message; }
 });
-$("#auth-backdrop").addEventListener("click", (e) => {
-  if (e.target === $("#auth-backdrop") && authMode === "admin") {
-    hideAuth(); setAuthMode("login");
-    if (!currentStudent) showAuth();
-  }
-});
-$("#auth-demo").addEventListener("click", async () => {
-  demoMode = true;
-  hideAuth();
-  $("#student-select").style.display = "";
-  $("#student-name").style.display = "none";
-  $("#logout-btn").style.display = "none";
-  await loadStudents();
-});
+
 $("#logout-btn").addEventListener("click", async () => {
-  await api("/api/auth/logout", { method: "POST",
-    headers: { Authorization: "Bearer " + authToken } }).catch(() => {});
+  await api("/api/auth/logout", { method: "POST" }).catch(() => {});
   authToken = "";
   localStorage.removeItem("atlas_token");
   location.reload();
 });
 
-function enterSignedIn(student) {
-  $("#student-select").style.display = "none";
-  $("#student-name").style.display = "";
-  $("#student-name").textContent = student.name;
+function enterSession(p) {
+  currentStudent = p.student || null;
+  currentCompany = p.company || null;
+  const name = p.role === "admin" ? "Administrator"
+    : p.role === "company" ? currentCompany.name : currentStudent.name;
+  $("#student-name").textContent = name;
+  $("#avatar-circle").textContent = name[0].toUpperCase();
   $("#logout-btn").style.display = "";
-  applyStudent(student);
+  showPortal(p.role);
+  if (p.role === "student") applyStudent(currentStudent);
+  if (p.role === "company") $("#c-hero-name").textContent = currentCompany.name;
+  loadMessages(false);
+  setInterval(() => loadMessages(false), 30000);
 }
 
 async function initSession() {
   if (authToken) {
-    try {
-      const student = await api("/api/auth/me",
-        { headers: { Authorization: "Bearer " + authToken } });
-      enterSignedIn(student);
-      return;
-    } catch { authToken = ""; localStorage.removeItem("atlas_token"); }
+    try { enterSession(await api("/api/auth/me")); return; }
+    catch { authToken = ""; localStorage.removeItem("atlas_token"); }
   }
+  renderAuth();
   showAuth();
 }
+$("#btn-admin-portal").addEventListener("click", () => {
+  if (currentRole === "admin") { switchTab("overview"); return; }
+  alert("Sign in with the administrator account to open the Admin Console.");
+  authMode = "login"; authRole = "student"; renderAuth(); showAuth();
+});
+$("#btn-student-portal").addEventListener("click", () => {});
 
-/* ================= portal + tab switching ================= */
-function switchPortal(portal) {
-  if (portal === "admin" && !adminToken) { setAuthMode("admin"); showAuth(); return; }
-  const first = portal === "student" ? "dashboard" : "overview";
-  switchTab(portal, first);
-  if (portal === "admin") {
-    loadAdminStats(); loadFairness(); loadAdminStudents(); loadListings(); loadAdminApps();
-    loadLivePmis();
-  }
-}
-const ADMIN_TABS = ["overview", "admin-students", "admin-apps", "listings"];
-function switchTab(portal, tab) {
-  document.querySelectorAll(".tab-view").forEach((v) => v.classList.remove("active"));
-  document.querySelectorAll("#nav-student .nav-tab").forEach((b) =>
-    b.classList.toggle("active", b.dataset.tab === tab && portal === "student"));
-  document.querySelectorAll("#nav-admin .nav-tab").forEach((b) =>
-    b.classList.toggle("active", b.dataset.tab === tab));
-  // admin pills live inside tab-overview; keep them visible on all admin tabs
-  const view = $("#tab-" + tab);
-  view.classList.add("active");
-  if (ADMIN_TABS.includes(tab) && tab !== "overview") {
-    // move the pill bar into the active admin view so navigation stays visible
-    const pills = $("#nav-admin");
-    view.prepend(pills);
-  } else if (tab === "overview") {
-    $("#tab-overview").prepend($("#nav-admin"));
-  }
-}
-$("#btn-student-portal").addEventListener("click", () => switchPortal("student"));
-$("#btn-admin-portal").addEventListener("click", () => switchPortal("admin"));
-document.querySelectorAll("#nav-student .nav-tab").forEach((b) =>
-  b.addEventListener("click", () => {
-    switchTab("student", b.dataset.tab);
-    if (b.dataset.tab === "applications") loadApplications();
-    if (b.dataset.tab === "explore") loadExplore();
-  }));
-document.querySelectorAll("#nav-admin .nav-tab").forEach((b) =>
-  b.addEventListener("click", () => switchTab("admin", b.dataset.tab)));
-document.querySelectorAll("[data-goto]").forEach((b) =>
-  b.addEventListener("click", () => switchTab("student", b.dataset.goto)));
-
-/* ================= student selection ================= */
-async function loadStudents() {
-  const data = await api("/api/students?page=1&page_size=250");
-  $("#student-select").innerHTML = data.items.map((s) =>
-    `<option value="${s.id}">${esc(s.name)}</option>`).join("");
-  await selectStudent(data.items[0].id);
-}
-async function selectStudent(id) {
-  const student = await api(`/api/students/${id}`);
-  $("#student-select").value = id;
-  applyStudent(student);
-}
+/* ================= student dashboard ================= */
 function applyStudent(student) {
   currentStudent = student;
   const first = student.name.split(" ")[0];
   $("#hero-name").textContent = first;
-  $("#avatar-circle").textContent = first[0].toUpperCase();
   $("#candidate-id").textContent =
-    `Candidate ID PMIS-2026-${String(880000 + currentStudent.id)}`;
+    `Candidate ID PMIS-2026-${String(880000 + student.id)}`;
   const filled = ["skills", "preferred_locations", "preferred_sectors"]
-    .filter((k) => currentStudent[k].length > 0).length;
+    .filter((k) => student[k].length > 0).length;
   const pct = Math.min(Math.round(40 + (filled / 3) * 55 +
-    (currentStudent.skills.length >= 3 ? 5 : 0)), 100);
+    (student.skills.length >= 3 ? 5 : 0)), 100);
   $("#profile-bar").style.width = pct + "%";
   $("#profile-pct-num").textContent = pct;
-  $("#profile-pct").textContent = pct >= 90 ? "Looking great!" : "Almost there!";
+  $("#profile-pct").textContent = pct >= 90 ? "Looking great!" : "Almost there";
   fillProfileForm();
   loadRecommendations();
   loadApplications();
 }
-$("#student-select").addEventListener("change", (e) => selectStudent(e.target.value));
 
-/* ================= recommendations ================= */
 async function loadRecommendations() {
   if (!currentStudent) return;
   const data = await api(`/api/students/${currentStudent.id}/recommendations?top_n=6`);
@@ -198,13 +200,12 @@ async function loadRecommendations() {
     || `<div class="cold-note">No eligible internships match the current filters.</div>`;
   bindCardActions("#rec-list");
 
-  // stat card + radar from the top recommendation
   if (!data.cold_start && data.recommendations.length) {
     const top = data.recommendations[0];
     const pct = Math.round(top.total_score * 100);
     $("#stat-match").textContent = pct;
     $("#stat-match-sub").textContent =
-      pct >= 75 ? "Excellent Match" : pct >= 50 ? "Good Match" : "Improve your profile";
+      pct >= 75 ? "Excellent match" : pct >= 50 ? "Good match" : "Improve your profile";
     $("#overall-match").textContent = pct + "%";
     renderRadar(top);
   } else {
@@ -215,6 +216,8 @@ async function loadRecommendations() {
       `<p class="sub-line" style="text-align:center; padding:20px 0">Add skills to your profile to see your match breakdown.</p>`;
   }
 }
+$("#rec-search").addEventListener("input", () => loadRecommendations());
+$("#rec-sector").addEventListener("change", () => loadRecommendations());
 
 function renderRadar(r) {
   const axes = [
@@ -247,13 +250,9 @@ function renderRadar(r) {
       ${[0.33, 0.66, 1].map((v) => `<polygon points="${ring(v)}" fill="none" stroke="#e9ecf2"/>`).join("")}
       ${spokes}
       <polygon points="${dataPoly}" fill="rgba(255,122,26,0.18)" stroke="#FF7A1A" stroke-width="2"/>
-      ${axes.map(([, v], i) => { const [x, y] = pt(i, Math.max(v, 0.08));
-        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#FF7A1A"/>`; }).join("")}
       ${labels}
     </svg>`;
 }
-$("#rec-search").addEventListener("input", () => loadRecommendations());
-$("#rec-sector").addEventListener("change", () => loadRecommendations());
 
 function matchCard(r, coldStart) {
   const j = r.internship;
@@ -263,7 +262,7 @@ function matchCard(r, coldStart) {
       <div style="flex:1">
         <div class="mc-title-row">
           <span class="mc-title">${esc(j.title)}</span>
-          ${j.verified ? `<span class="badge-verified">&#10003; VERIFIED EMPLOYER</span>` : ""}
+          ${j.verified ? `<span class="badge-verified">VERIFIED EMPLOYER</span>` : ""}
         </div>
         <div class="mc-meta">${esc(j.company)} &middot; ${esc(j.location)}, ${esc(j.state)} &middot; ${j.duration_months} months &middot; &#8377;${j.stipend.toLocaleString("en-IN")}/month</div>
         <span class="sector-tag">${esc(j.sector)}</span>
@@ -272,10 +271,10 @@ function matchCard(r, coldStart) {
       ${pct === null ? "" : `<div class="score-pill-wrap"><span class="score-pill">${pct}% Match</span></div>`}
     </div>
     <div class="mc-actions">
-      ${pct === null ? "<span></span>" : `<button class="reason-toggle" data-act="reason">${t("viewReasoning", "View match reasoning &#9660;")}</button>`}
+      ${pct === null ? "<span></span>" : `<button class="reason-toggle" data-act="reason">View match reasoning</button>`}
       <div class="mc-buttons">
-        <button class="btn-details" data-act="details">${t("moreDetails", "More Details")}</button>
-        <button class="btn btn-navy" data-act="apply">${t("applyNow", "Apply Now")}</button>
+        <button class="btn-details" data-act="details">More Details</button>
+        ${currentRole === "student" ? `<button class="btn btn-navy" data-act="apply">Apply Now</button>` : ""}
       </div>
     </div>
     ${pct === null ? "" : `<div class="reason-panel">
@@ -297,9 +296,8 @@ function bindCardActions(scope) {
         if (btn.dataset.act === "reason") {
           const panel = card.querySelector(".reason-panel");
           panel.classList.toggle("show");
-          btn.innerHTML = panel.classList.contains("show")
-            ? t("hideReasoning", "Hide match reasoning &#9650;")
-            : t("viewReasoning", "View match reasoning &#9660;");
+          btn.textContent = panel.classList.contains("show")
+            ? "Hide match reasoning" : "View match reasoning";
         }
         if (btn.dataset.act === "details") showDetails(id);
         if (btn.dataset.act === "apply") applyTo(id, btn);
@@ -321,7 +319,6 @@ async function applyTo(internshipId, btn) {
   } catch (e) { alert(e.message); }
 }
 
-/* ================= details modal ================= */
 function showDetails(id) {
   const j = internshipCache[id];
   if (!j) return;
@@ -329,22 +326,22 @@ function showDetails(id) {
     <h3>${esc(j.title)}</h3>
     <div class="mc-title-row" style="margin:6px 0">
       <strong>${esc(j.company)}</strong>
-      ${j.verified ? `<span class="badge-verified">&#10003; VERIFIED EMPLOYER</span>`
+      ${j.verified ? `<span class="badge-verified">VERIFIED EMPLOYER</span>`
                    : `<span class="badge-pending">VERIFICATION PENDING</span>`}
     </div>
     <div class="modal-meta">${esc(j.location)}, ${esc(j.state)} &middot; ${esc(j.sector)} &middot; ${j.duration_months} months &middot; &#8377;${j.stipend.toLocaleString("en-IN")}/month &middot; ${j.capacity} seats</div>
-    <div class="modal-section"><h4>About the Company</h4><p style="font-size:0.86rem; color:#4b5563">${esc(j.company_about || j.description)}</p></div>
-    <div class="modal-section"><h4>Role Description</h4><p style="font-size:0.86rem; color:#4b5563">${esc(j.description)}</p></div>
+    <div class="modal-section"><h4>About the Company</h4><p style="font-size:0.86rem; color:#4a5265">${esc(j.company_about || j.description)}</p></div>
+    <div class="modal-section"><h4>Role Description</h4><p style="font-size:0.86rem; color:#4a5265">${esc(j.description)}</p></div>
     <div class="modal-section"><h4>Required Skills</h4><div class="mc-title-row">${j.skills_required.map((s) => `<span class="sector-tag">${esc(s)}</span>`).join(" ")}</div></div>
     ${j.assessment_stages && j.assessment_stages.length ? `
       <div class="modal-section"><h4>Assessment Stages</h4>
         <ol class="stages-list">${j.assessment_stages.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
       </div>` : ""}
-    <div class="modal-section">
-      <button class="btn btn-navy" id="modal-apply">${t("applyNow", "Apply Now")}</button>
-    </div>`;
+    ${currentRole === "student" ? `<div class="modal-section">
+      <button class="btn btn-navy" id="modal-apply">Apply Now</button></div>` : ""}`;
   $("#modal-backdrop").classList.add("show");
-  $("#modal-apply").addEventListener("click", (e) => applyTo(id, e.target));
+  const b = $("#modal-apply");
+  if (b) b.addEventListener("click", (e) => applyTo(id, e.target));
 }
 $("#modal-close").addEventListener("click", () => $("#modal-backdrop").classList.remove("show"));
 $("#modal-backdrop").addEventListener("click", (e) => {
@@ -373,7 +370,7 @@ $("#explore-search").addEventListener("keydown", (e) => {
 $("#explore-prev").addEventListener("click", () => { explorePage--; loadExplore(); });
 $("#explore-next").addEventListener("click", () => { explorePage++; loadExplore(); });
 
-/* ================= my applications + timeline ================= */
+/* ================= applications ================= */
 const STATUS_CLASS = {
   "Applied": "st-applied", "Shortlisted": "st-shortlisted", "Offer Sent": "st-offer",
   "Accepted": "st-accepted", "Declined": "st-declined", "Rejected": "st-rejected",
@@ -398,6 +395,7 @@ async function loadApplications() {
         <td class="td-muted">${new Date(a.applied_at).toLocaleDateString("en-IN")}</td>
       </tr>`).join("")}</tbody></table></div>`
     : `<p class="sub-line">No applications yet. Apply from the recommendations above.</p>`;
+
   $("#applications-list").innerHTML = apps.length ? apps.map((a) => `
     <div class="match-card">
       <div class="mc-title-row">
@@ -406,14 +404,14 @@ async function loadApplications() {
       </div>
       <div class="mc-meta">${esc(a.internship.company)} &middot; ${esc(a.internship.location)} &middot; Applied ${new Date(a.applied_at).toLocaleDateString("en-IN")}</div>
       ${a.status === "Offer Sent" ? `
-        <div class="mc-actions"><span class="reason-text">You have an offer! Respond within 14 days.</span>
+        <div class="mc-actions"><span class="reason-text">You have an offer. Respond within 14 days.</span>
           <div class="mc-buttons">
             <button class="mini-btn mini-green" data-appid="${a.id}" data-newstatus="Accepted">Accept Offer</button>
             <button class="mini-btn mini-red" data-appid="${a.id}" data-newstatus="Declined">Decline</button>
           </div></div>` : ""}
       ${a.status === "Accepted" ? `<div class="reason-text" style="margin-top:8px">Congratulations! Joining details will be shared by ${esc(a.internship.company)}.</div>` : ""}
     </div>`).join("")
-    : `<div class="cold-note">No applications yet. Apply from the Dashboard or Explore Internships. A candidate may hold up to 3 active applications.</div>`;
+    : `<div class="cold-note">No applications yet. There is no cap: apply to every internship that fits you.</div>`;
   document.querySelectorAll("#applications-list [data-appid]").forEach((b) =>
     b.addEventListener("click", async () => {
       await api(`/api/applications/${b.dataset.appid}/status`, {
@@ -449,7 +447,7 @@ $("#profile-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const [qual, level] = $("#f-qual").value.split("|");
   const csv = (v) => v.split(",").map((x) => x.trim()).filter(Boolean);
-  await api(`/api/students/${currentStudent.id}`, {
+  const updated = await api(`/api/students/${currentStudent.id}`, {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       skills: csv($("#f-skills").value),
@@ -462,10 +460,324 @@ $("#profile-form").addEventListener("submit", async (e) => {
   });
   $("#profile-saved").textContent = "Saved. Recommendations refreshed.";
   setTimeout(() => { $("#profile-saved").textContent = ""; }, 3000);
-  selectStudent(currentStudent.id);
+  applyStudent(updated);
 });
 
-/* ================= admin: stats + funnel + fairness ================= */
+/* ================= profile intake assistant ================= */
+$("#mode-form").addEventListener("click", () => setProfileMode("form"));
+$("#mode-chat").addEventListener("click", () => setProfileMode("chat"));
+function setProfileMode(mode) {
+  $("#mode-form").classList.toggle("active", mode === "form");
+  $("#mode-chat").classList.toggle("active", mode === "chat");
+  $("#profile-form-card").style.display = mode === "form" ? "block" : "none";
+  $("#profile-chat-card").style.display = mode === "chat" ? "block" : "none";
+  if (mode === "chat") startIntake();
+}
+
+const QUAL_OPTIONS = ["12th Pass", "Diploma", "BA", "BCom", "BSc", "BBA", "BPharm",
+  "BTech CSE", "BTech Mechanical", "BTech Electrical", "MBA", "MTech", "MSc"];
+const QUAL_LEVEL = (q) => q === "12th Pass" ? 1 : q === "Diploma" ? 2
+  : ["MBA", "MTech", "MSc"].includes(q) ? 4 : 3;
+
+let intake = null;
+const INTAKE_STEPS = [
+  { key: "qualification",
+    ask: () => "What is your highest qualification?",
+    options: () => QUAL_OPTIONS,
+    parse: (v) => QUAL_OPTIONS.find((q) => q.toLowerCase() === v.trim().toLowerCase()) || null,
+    error: "Please pick one of the listed qualifications (tap a button below)." },
+  { key: "skills",
+    ask: () => "Now tell me your skills, separated by commas. For example: Python, SQL, Excel",
+    options: () => [],
+    parse: (v) => { const l = v.split(",").map((x) => x.trim()).filter(Boolean); return l.length ? l : null; },
+    error: "Please list at least one skill, separated by commas." },
+  { key: "locations",
+    ask: () => "Which cities would you prefer to work in? Separate with commas, or say Any.",
+    options: () => ["Any"],
+    parse: (v) => { const l = v.split(",").map((x) => x.trim()).filter(Boolean); return l.length ? l : null; },
+    error: "Please name at least one city, or tap Any." },
+  { key: "sectors",
+    ask: () => "Which sector interests you most? Tap one or type several, separated by commas.",
+    options: () => SECTOR_LIST,
+    parse: (v) => { const l = v.split(",").map((x) => x.trim()).filter(Boolean); return l.length ? l : null; },
+    error: "Please choose at least one sector." },
+  { key: "first_generation",
+    ask: () => "Are you the first person in your family to attend college? This helps the scheme's fairness policy work for you; it never reduces your score.",
+    options: () => ["Yes", "No"],
+    parse: (v) => /^y/i.test(v.trim()) ? true : /^n/i.test(v.trim()) ? false : null,
+    error: "Please answer Yes or No." },
+  { key: "college_tier",
+    ask: () => "Which tier is your college? Tier 1 (IIT/NIT/top university), Tier 2 (state university), or Tier 3 (local college).",
+    options: () => ["Tier 1", "Tier 2", "Tier 3"],
+    parse: (v) => { const m = v.match(/[123]/); return m ? Number(m[0]) : null; },
+    error: "Please pick Tier 1, 2 or 3." },
+];
+
+function startIntake() {
+  if (!currentStudent) return;
+  intake = { step: 0, answers: {} };
+  $("#intake-messages").innerHTML = "";
+  intakeMsg("bot", `Namaste ${currentStudent.name.split(" ")[0]}! I will set up your profile in a few quick questions. Tap an option or type your answer.`);
+  askCurrent();
+}
+function intakeMsg(who, text) {
+  const div = document.createElement("div");
+  div.className = "chat-msg " + (who === "user" ? "chat-user" : "chat-bot");
+  div.textContent = text;
+  $("#intake-messages").appendChild(div);
+  $("#intake-messages").scrollTop = $("#intake-messages").scrollHeight;
+}
+function showTyping(container) {
+  const div = document.createElement("div");
+  div.className = "chat-msg chat-bot typing-bubble";
+  div.innerHTML = `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+async function askCurrent() {
+  const step = INTAKE_STEPS[intake.step];
+  const typing = showTyping($("#intake-messages"));
+  await new Promise((r) => setTimeout(r, 550));
+  typing.remove();
+  intakeMsg("bot", step.ask());
+  $("#intake-quick").innerHTML = step.options().map((o) =>
+    `<button class="quick-btn">${esc(o)}</button>`).join("");
+  document.querySelectorAll("#intake-quick .quick-btn").forEach((b) =>
+    b.addEventListener("click", () => handleIntake(b.textContent)));
+}
+async function handleIntake(value) {
+  const step = INTAKE_STEPS[intake.step];
+  intakeMsg("user", value);
+  const parsed = step.parse(value);
+  if (parsed === null) { intakeMsg("bot", step.error); return; }
+  intake.answers[step.key] = parsed;
+  intake.step += 1;
+  if (intake.step < INTAKE_STEPS.length) { askCurrent(); return; }
+  $("#intake-quick").innerHTML = "";
+  const a = intake.answers;
+  const updated = await api(`/api/students/${currentStudent.id}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      skills: a.skills, qualification: a.qualification,
+      qualification_level: QUAL_LEVEL(a.qualification),
+      preferred_locations: a.locations, preferred_sectors: a.sectors,
+      first_generation: a.first_generation, college_tier: a.college_tier,
+    }),
+  });
+  intakeMsg("bot", `All set! Your profile is saved: ${a.qualification}, skills ${a.skills.join(", ")}. Your recommendations are ready on the Dashboard.`);
+  $("#intake-quick").innerHTML =
+    `<button class="quick-btn q-green" id="intake-goto-dash">See my recommendations</button>`;
+  $("#intake-goto-dash").addEventListener("click", () => switchTab("dashboard"));
+  applyStudent(updated);
+}
+$("#intake-send").addEventListener("click", () => {
+  const v = $("#intake-input").value.trim();
+  if (v && intake) { $("#intake-input").value = ""; handleIntake(v); }
+});
+$("#intake-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("#intake-send").click(); }
+});
+
+/* ================= messages / notifications ================= */
+async function loadMessages(markRead) {
+  if (!authToken || currentRole === "admin") return;
+  const data = await api("/api/notifications").catch(() => ({ unread: 0, items: [] }));
+  const badge = currentRole === "company" ? $("#msg-badge-c") : $("#msg-badge");
+  const dot = document.querySelector(".bell-dot");
+  [badge, dot].forEach((el) => {
+    if (!el) return;
+    el.textContent = data.unread;
+    el.style.display = data.unread ? "" : "none";
+  });
+  $("#notif-list").innerHTML = data.items.length ? data.items.map((n) => `
+    <div class="ann-item ${n.read ? "" : "notif-unread"}">
+      <span class="ann-ico ${n.read ? "ico-blue" : "ico-saffron"}"><svg class="ico"><use href="#i-bell"/></svg></span>
+      <div><p style="color:var(--ink); font-size:0.84rem">${esc(n.text)}</p></div>
+      <span class="ann-time">${new Date(n.created_at).toLocaleDateString("en-IN")}</span>
+    </div>`).join("")
+    : `<p class="sub-line">No messages yet. Updates about your applications and offers appear here.</p>`;
+  if (markRead && data.unread) {
+    await api("/api/notifications/read", { method: "POST" });
+    setTimeout(() => loadMessages(false), 400);
+  }
+}
+$("#mark-read").addEventListener("click", async () => {
+  await api("/api/notifications/read", { method: "POST" });
+  loadMessages(false);
+});
+$("#side-bell").addEventListener("click", () => switchTab("messages"));
+
+/* ================= documents ================= */
+$("#resume-upload").addEventListener("click", async () => {
+  const f = $("#resume-file").files[0];
+  if (!f) { $("#upload-note").textContent = "Choose a PDF first."; return; }
+  const fd = new FormData();
+  fd.append("file", f);
+  $("#upload-note").textContent = "Uploading...";
+  try {
+    const res = await api("/api/documents", { method: "POST", body: fd });
+    $("#upload-note").textContent = "Uploaded.";
+    if (res.parsed_skills.length) {
+      const box = $("#parsed-skills-box");
+      box.style.display = "block";
+      box.innerHTML = `We found these skills in your resume: <strong>${res.parsed_skills.map(esc).join(", ")}</strong>.
+        <button class="mini-btn mini-green" id="adopt-skills" style="margin-left:8px">Add to my profile</button>`;
+      $("#adopt-skills").addEventListener("click", async () => {
+        const merged = [...new Set([...currentStudent.skills, ...res.parsed_skills])];
+        const updated = await api(`/api/students/${currentStudent.id}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            skills: merged, qualification: currentStudent.qualification,
+            qualification_level: currentStudent.qualification_level,
+            preferred_locations: currentStudent.preferred_locations,
+            preferred_sectors: currentStudent.preferred_sectors,
+            first_generation: currentStudent.first_generation,
+            college_tier: currentStudent.college_tier,
+          }),
+        });
+        box.innerHTML = "Skills added to your profile. Recommendations refreshed.";
+        applyStudent(updated);
+      });
+    }
+    loadDocuments();
+  } catch (e) { $("#upload-note").textContent = e.message; }
+});
+
+async function loadDocuments() {
+  if (currentRole !== "student") return;
+  const docs = await api("/api/documents").catch(() => []);
+  $("#docs-list").innerHTML = docs.length ? `
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>File</th><th>Uploaded</th><th>Skills Detected</th><th></th></tr></thead>
+      <tbody>${docs.map((d) => `<tr>
+        <td class="td-strong">${esc(d.filename)}</td>
+        <td class="td-muted">${new Date(d.uploaded_at).toLocaleDateString("en-IN")}</td>
+        <td>${d.parsed_skills.map((s) => `<span class="sector-tag">${esc(s)}</span>`).join(" ") || `<span class="td-muted">-</span>`}</td>
+        <td><a class="link-btn" href="/api/documents/${d.id}/download?token=${authToken}" target="_blank">View</a></td>
+      </tr>`).join("")}</tbody></table></div>`
+    : `<p class="sub-line" style="margin-top:14px">No documents uploaded yet.</p>`;
+}
+
+/* ================= skill analytics ================= */
+async function loadSkillAnalytics() {
+  if (!currentStudent) return;
+  const d = await api(`/api/students/${currentStudent.id}/skill-analytics`);
+  const maxCount = Math.max(...d.top_demand.map((x) => x.count), 1);
+  $("#skills-body").innerHTML = `
+    <div class="overall-row"><span>Your skills match</span>
+      <span class="overall-pill">${d.coverage_pct}% of ${d.total_internships} listings</span></div>
+    ${d.top_missing.length ? `<div class="cold-note">Most valuable skills to learn next:
+      <strong>${d.top_missing.map((m) => esc(m.skill)).join(", ")}</strong></div>` : ""}
+    <h4 style="margin:14px 0 10px; font-size:0.85rem">Demand across all listings</h4>
+    ${d.top_demand.map((x) => `
+      <div class="fair-row" style="grid-template-columns: 150px 1fr 90px; margin-bottom:7px">
+        <span style="font-weight:700; color:${x.have ? "var(--green)" : "var(--ink)"}">${esc(x.skill)}${x.have ? " &#10003;" : ""}</span>
+        <div class="fair-track"><div class="${x.have ? "fair-fill-adj" : "fair-fill-raw"}" style="width:${Math.round(x.count / maxCount * 100)}%"></div></div>
+        <span>${x.count} listings</span>
+      </div>`).join("")}`;
+}
+
+/* ================= help & support ================= */
+const FAQS = [
+  ["What is the stipend?", "Interns receive Rs 5,000 per month as assistance, plus a one-time grant of Rs 6,000 on joining."],
+  ["Who is eligible?", "Youth aged 21-24 who are not in full-time employment or full-time education. Qualification requirements vary per internship and ATLAS checks them automatically."],
+  ["How many internships can I apply to?", "There is no cap in ATLAS. Apply to every internship that fits you; the allocation engine optimises across all applications."],
+  ["How does matching work?", "Hard eligibility rules run first, then semantic skill matching, fairness weighting per the scheme's affirmative-action policy, and a global optimisation so allocations are fair across all candidates."],
+  ["What does the Verified badge mean?", "The scheme administrator has reviewed the listing. Prefer verified listings."],
+  ["How long is the internship?", "12 months, with mentorship and on-the-job training at a partner company."],
+];
+function renderFaq() {
+  if ($("#faq-list").children.length) return;
+  $("#faq-list").innerHTML = FAQS.map(([q, a], i) => `
+    <details class="faq-item"><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("");
+}
+$("#help-chat").addEventListener("click", () => openAssistant());
+$("#complaint-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  await api("/api/complaints", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject: $("#cmp-subject").value, details: $("#cmp-details").value }),
+  });
+  $("#cmp-note").textContent = "Submitted. The administrator will review it.";
+  $("#complaint-form").reset();
+  setTimeout(() => { $("#cmp-note").textContent = ""; }, 4000);
+});
+
+/* ================= company portal ================= */
+async function loadCompanyDash() {
+  const data = await api("/api/company/me");
+  const c = data.company;
+  const verified = data.listings.filter((j) => j.status === "Verified").length;
+  $("#c-stats").innerHTML = `
+    <div class="scard"><div class="scard-top"><div class="scard-ico ico-blue"><svg class="ico"><use href="#i-briefcase"/></svg></div>
+      <span class="scard-label">Listings</span></div><div class="scard-value">${data.listings.length}</div></div>
+    <div class="scard"><div class="scard-top"><div class="scard-ico ico-green"><svg class="ico"><use href="#i-shield"/></svg></div>
+      <span class="scard-label">Verified</span></div><div class="scard-value">${verified}</div></div>
+    <div class="scard"><div class="scard-top"><div class="scard-ico ico-saffron"><svg class="ico"><use href="#i-clipboard"/></svg></div>
+      <span class="scard-label">Applications</span></div><div class="scard-value">${data.applications}</div></div>
+    <div class="scard"><div class="scard-top"><div class="scard-ico ico-purple"><svg class="ico"><use href="#i-building"/></svg></div>
+      <span class="scard-label">Status</span></div><div class="scard-value" style="font-size:1.1rem">${esc(c.status)}</div></div>`;
+  $("#c-listings-tbody").innerHTML = data.listings.map((j) => `
+    <tr><td class="td-strong">${esc(j.title)}</td><td>${esc(j.location)}</td>
+    <td>${j.capacity}</td><td>${j.status === "Verified"
+      ? `<span class="badge-verified">VERIFIED</span>`
+      : `<span class="badge-pending">${esc(j.status).toUpperCase()}</span>`}</td></tr>`).join("")
+    || `<tr><td colspan="4" class="td-muted">No listings yet. Use Post Internship.</td></tr>`;
+}
+
+$("#c-post-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const csv = (v) => v.split(",").map((x) => x.trim()).filter(Boolean);
+  await api("/api/company/internships", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: $("#cp-title").value, location: $("#cp-location").value,
+      state: $("#cp-state").value, skills_required: csv($("#cp-skills").value),
+      min_qualification_level: Number($("#cp-minqual").value),
+      capacity: Number($("#cp-capacity").value),
+    }),
+  });
+  $("#cp-note").textContent = "Published. Awaiting admin verification.";
+  $("#c-post-form").reset();
+  setTimeout(() => { $("#cp-note").textContent = ""; }, 4000);
+});
+
+async function loadCompanyApplicants() {
+  const apps = await api("/api/company/applicants");
+  $("#c-apps-tbody").innerHTML = apps.length ? apps.map((a) => `
+    <tr>
+      <td class="td-strong">${esc(a.student.name)}<br><span class="td-muted" style="font-size:0.74rem">${esc(a.student.qualification)}</span></td>
+      <td>${esc(a.internship_title)}</td>
+      <td>${a.student.skills.slice(0, 3).map((s) => `<span class="sector-tag">${esc(s)}</span>`).join(" ")}</td>
+      <td><span class="score-chip">${a.match_pct}%</span></td>
+      <td>${a.documents.length
+        ? a.documents.map((d) => `<a class="link-btn" href="/api/documents/${d.id}/download?token=${authToken}" target="_blank">Resume</a>`).join(" ")
+        : `<span class="td-muted">None</span>`}</td>
+      <td>${statusBadge(a.status)}</td>
+      <td>
+        ${a.status === "Applied" ? `
+          <button class="mini-btn mini-navy" data-appid="${a.id}" data-newstatus="Shortlisted">Shortlist</button>
+          <button class="mini-btn mini-red" data-appid="${a.id}" data-newstatus="Rejected">Reject</button>` : ""}
+        ${a.status === "Shortlisted" ? `
+          <button class="mini-btn mini-green" data-appid="${a.id}" data-newstatus="Offer Sent">Send Offer</button>
+          <button class="mini-btn mini-red" data-appid="${a.id}" data-newstatus="Rejected">Reject</button>` : ""}
+        ${["Offer Sent", "Accepted", "Declined", "Rejected"].includes(a.status)
+          ? `<span class="td-muted" style="font-size:0.74rem">${a.status === "Offer Sent" ? "Awaiting response" : "Closed"}</span>` : ""}
+      </td>
+    </tr>`).join("")
+    : `<tr><td colspan="7" class="td-muted">No applications yet.</td></tr>`;
+  document.querySelectorAll("#c-apps-tbody [data-appid]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await api(`/api/applications/${b.dataset.appid}/status`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: b.dataset.newstatus }),
+      });
+      loadCompanyApplicants();
+    }));
+}
+
+/* ================= admin ================= */
 const NATIONAL_FUNNEL = [
   ["Opportunities Posted", 127000, "var(--navy)"],
   ["Applications Received", 621000, "var(--saffron)"],
@@ -481,46 +793,74 @@ function renderFunnel() {
       <div class="funnel-track"><div class="funnel-fill" style="width:${Math.max(2, (num / max) * 100)}%; background:${color}"></div></div>
     </div>`).join("");
 }
-async function loadLivePmis() {
-  try {
-    const data = await api("/api/live/pmis");
-    $("#live-badge").style.display = "";
-    const max = Math.max(...data.records.map((r) => r.accepted), 1);
-    $("#live-pmis").innerHTML =
-      `<div class="funnel" style="margin-top:12px">` +
-      data.records.slice(0, 8).map((r) => `
-        <div class="funnel-row">
-          <div class="funnel-top"><span>${esc(r.state)}</span>
-            <span class="funnel-num">${r.accepted.toLocaleString("en-IN")}</span></div>
-          <div class="funnel-track"><div class="funnel-fill" style="width:${Math.max(2, (r.accepted / max) * 100)}%; background:var(--green)"></div></div>
-        </div>`).join("") +
-      `</div><p class="sub-line" style="margin-top:10px">Total accepted (pilot round): <strong>${data.total_accepted.toLocaleString("en-IN")}</strong> &middot; Source: ${esc(data.source)}</p>`;
-  } catch {
-    $("#live-badge").style.display = "none";
-    $("#live-pmis").innerHTML =
-      `<div class="cold-note">Live government data is temporarily unavailable. The national funnel above uses the latest published figures.</div>`;
-  }
-}
 
 async function loadAdminStats() {
   const s = await api("/api/admin/stats");
   const cards = [
-    ["Students Registered", s.students, "ico-blue", "&#128100;"],
-    ["Internships Posted", s.internships, "ico-saffron", "&#128188;"],
-    ["Total Capacity", s.capacity, "ico-green", "&#127970;"],
-    ["Applications", s.applications, "ico-purple", "&#128203;"],
-    ["Allocated", s.allocated, "ico-green", "&#9989;"],
+    ["Students", s.students, "ico-blue", "i-user"],
+    ["Companies", s.companies, "ico-saffron", "i-building"],
+    ["Internships", s.internships, "ico-green", "i-briefcase"],
+    ["Applications", s.applications, "ico-purple", "i-clipboard"],
+    ["Allocated", s.allocated, "ico-green", "i-shield"],
   ];
   $("#admin-stats").innerHTML = cards.map(([label, num, cls, ico]) => `
-    <div class="scard"><div class="scard-ico ${cls}">${ico}</div>
-    <div class="scard-label">${label}</div>
+    <div class="scard"><div class="scard-top"><div class="scard-ico ${cls}"><svg class="ico"><use href="#${ico}"/></svg></div>
+    <span class="scard-label">${label}</span></div>
     <div class="scard-value">${Number(num).toLocaleString("en-IN")}</div></div>`).join("");
 }
+
+async function loadInsights() {
+  try {
+    const d = await api("/api/live/insights");
+    $("#insights-badge").style.display = d.live === false ? "none" : "";
+    const t = d.totals;
+    const top = d.states.slice(0, 8);
+    $("#insights-body").innerHTML = `
+      <div class="stat-cards" style="grid-template-columns:repeat(4,1fr); margin:12px 0">
+        ${[["Profiles", t.profiles], ["Opportunities", t.opportunities],
+           ["Offers", t.offers], ["Accepted", t.accepted]].map(([l, v]) => `
+          <div class="scard" style="padding:12px 14px"><span class="scard-label">${l}</span>
+          <div class="scard-value" style="font-size:1.2rem">${Number(v).toLocaleString("en-IN")}</div></div>`).join("")}
+      </div>
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th>State</th><th>Profiles</th><th>Opportunities</th><th>Offers</th><th>Accepted</th></tr></thead>
+        <tbody>${top.map((s) => `<tr>
+          <td class="td-strong">${esc(s.state)}</td>
+          <td>${(s.profiles || 0).toLocaleString("en-IN")}</td>
+          <td>${(s.opportunities || 0).toLocaleString("en-IN")}</td>
+          <td>${(s.offers || 0).toLocaleString("en-IN")}</td>
+          <td class="score-chip">${(s.accepted || 0).toLocaleString("en-IN")}</td>
+        </tr>`).join("")}</tbody></table></div>`;
+  } catch {
+    $("#insights-body").innerHTML = `<p class="sub-line">Live government data unavailable right now.</p>`;
+  }
+}
+
+async function loadLivePmis() {
+  try {
+    const d = await api("/api/live/pmis");
+    $("#live-badge").style.display = "";
+    const top = d.records.slice(0, 10);
+    const max = Math.max(...top.map((r) => r.accepted), 1);
+    $("#live-pmis").innerHTML = `
+      <p class="sub-line" style="margin:8px 0">${esc(d.title)} &middot; Total accepted: <strong>${d.total_accepted.toLocaleString("en-IN")}</strong></p>
+      ${top.map((r) => `
+        <div class="fair-row" style="grid-template-columns:170px 1fr 70px; margin-bottom:6px">
+          <span style="font-weight:700">${esc(r.state)}</span>
+          <div class="fair-track"><div class="fair-fill-adj" style="width:${Math.round(r.accepted / max * 100)}%"></div></div>
+          <span>${r.accepted.toLocaleString("en-IN")}</span>
+        </div>`).join("")}`;
+  } catch {
+    $("#live-pmis").innerHTML = `<p class="sub-line">Live government data unavailable right now.</p>`;
+  }
+}
+
 async function loadFairness() {
   const data = await api("/api/allocation");
   if (!data.matches.length) {
     $("#fairness-bars").innerHTML =
       `<div class="cold-note">No allocation run yet. Press Run Allocation Engine above.</div>`;
+    $("#alloc-result").style.display = "none";
     return;
   }
   const groups = {
@@ -542,10 +882,7 @@ async function loadFairness() {
         <span><strong>Adj. ${Math.round(adj * 100)}</strong></span></div>
     </div>`;
   }
-  const allAdj = data.matches.reduce((a, m) => a + m.total_score, 0) / data.matches.length;
-  $("#fairness-bars").innerHTML =
-    `<span class="fair-index">Fairness Index: ${(Math.min(allAdj + 0.25, 0.99)).toFixed(2)} / 1.00</span>` + html;
-
+  $("#fairness-bars").innerHTML = html || `<p class="sub-line">Waiting for allocations.</p>`;
   const sm = data.summary;
   $("#alloc-result").style.display = "block";
   $("#alloc-result-body").innerHTML = `
@@ -557,12 +894,11 @@ async function loadFairness() {
 $("#run-allocation").addEventListener("click", async () => {
   const btn = $("#run-allocation");
   btn.disabled = true; btn.textContent = "Running allocation engine...";
-  await api("/api/allocate", { method: "POST" });
-  btn.disabled = false; btn.innerHTML = "&#9881; " + t("runAllocation", "Run Allocation Engine");
+  try { await api("/api/allocate", { method: "POST" }); } catch (e) { alert(e.message); }
+  btn.disabled = false; btn.textContent = "Run Allocation Engine";
   loadAdminStats(); loadFairness(); loadAdminStudents();
 });
 
-/* ================= admin: students table ================= */
 let studentsPage = 1;
 const STUDENTS_SIZE = 15;
 async function loadAdminStudents() {
@@ -572,7 +908,7 @@ async function loadAdminStudents() {
   $("#students-pages").textContent = `${studentsPage} / ${maxPage} (${data.total})`;
   $("#students-prev").disabled = studentsPage <= 1;
   $("#students-next").disabled = studentsPage >= maxPage;
-  $("#students-tbody").innerHTML = data.items.map((s) => `
+  $("#students-tbody").innerHTML = data.items.length ? data.items.map((s) => `
     <tr>
       <td class="td-strong">${esc(s.name)}</td>
       <td>${esc(s.qualification)}</td>
@@ -582,16 +918,38 @@ async function loadAdminStudents() {
       <td>${s.allocated ? `<span class="td-strong">${esc(s.allocated_company)}</span>` : `<span class="unallocated">Not allocated</span>`}</td>
       <td>${s.allocated ? esc(s.allocated_role) : `<span class="td-muted">-</span>`}</td>
       <td>${s.allocated ? `<span class="score-chip">${Math.round(s.match_score * 100)}%</span>` : `<span class="td-muted">-</span>`}</td>
-    </tr>`).join("");
+    </tr>`).join("")
+    : `<tr><td colspan="7" class="td-muted">No students registered yet.</td></tr>`;
 }
 $("#students-search").addEventListener("input", () => { studentsPage = 1; loadAdminStudents(); });
 $("#students-prev").addEventListener("click", () => { studentsPage--; loadAdminStudents(); });
 $("#students-next").addEventListener("click", () => { studentsPage++; loadAdminStudents(); });
 
-/* ================= admin: applications & offers ================= */
+async function loadAdminCompanies() {
+  const companies = await api("/api/admin/companies");
+  $("#admin-companies-tbody").innerHTML = companies.map((c) => `
+    <tr>
+      <td class="td-strong">${esc(c.name)}</td>
+      <td>${esc(c.sector)}</td>
+      <td>${c.listings}</td>
+      <td>${c.status === "Active" ? `<span class="badge-verified">ACTIVE</span>` : `<span class="st-badge st-rejected">SUSPENDED</span>`}</td>
+      <td><button class="mini-btn ${c.status === "Active" ? "mini-red" : "mini-green"}"
+        data-cid="${c.id}" data-newstatus="${c.status === "Active" ? "Suspended" : "Active"}">
+        ${c.status === "Active" ? "Suspend" : "Activate"}</button></td>
+    </tr>`).join("");
+  document.querySelectorAll("#admin-companies-tbody [data-cid]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await api(`/api/admin/companies/${b.dataset.cid}/status`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: b.dataset.newstatus }),
+      });
+      loadAdminCompanies();
+    }));
+}
+
 async function loadAdminApps() {
   let apps;
-  try { apps = await adminApi("/api/admin/applications"); }
+  try { apps = await api("/api/admin/applications"); }
   catch { $("#admin-apps-tbody").innerHTML =
     `<tr><td colspan="6" class="td-muted">Admin sign-in required.</td></tr>`; return; }
   $("#admin-apps-tbody").innerHTML = apps.length ? apps.map((a) => `
@@ -608,23 +966,21 @@ async function loadAdminApps() {
         ${a.status === "Shortlisted" ? `
           <button class="mini-btn mini-green" data-appid="${a.id}" data-newstatus="Offer Sent">Send Offer</button>
           <button class="mini-btn mini-red" data-appid="${a.id}" data-newstatus="Rejected">Reject</button>` : ""}
-        ${["Offer Sent"].includes(a.status) ? `<span class="td-muted" style="font-size:0.76rem">Awaiting student response</span>` : ""}
-        ${["Accepted", "Declined", "Rejected"].includes(a.status) ? `<span class="td-muted" style="font-size:0.76rem">Closed</span>` : ""}
+        ${["Offer Sent", "Accepted", "Declined", "Rejected"].includes(a.status)
+          ? `<span class="td-muted" style="font-size:0.74rem">${a.status === "Offer Sent" ? "Awaiting student" : "Closed"}</span>` : ""}
       </td>
     </tr>`).join("")
-    : `<tr><td colspan="6" class="td-muted">No applications yet. Students apply from the Student Portal.</td></tr>`;
+    : `<tr><td colspan="6" class="td-muted">No applications yet.</td></tr>`;
   document.querySelectorAll("#admin-apps-tbody [data-appid]").forEach((b) =>
     b.addEventListener("click", async () => {
-      await adminApi(`/api/applications/${b.dataset.appid}/status`, {
+      await api(`/api/applications/${b.dataset.appid}/status`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: b.dataset.newstatus }),
       });
       loadAdminApps();
-      loadApplications();
     }));
 }
 
-/* ================= admin: listings + add job ================= */
 let listingsPage = 1;
 const LISTINGS_SIZE = 12;
 async function loadListings() {
@@ -640,9 +996,21 @@ async function loadListings() {
       <td>${esc(j.company)}</td>
       <td>${esc(j.location)}</td>
       <td>${j.capacity}</td>
-      <td>${j.verified ? `<span class="badge-verified">&#10003; VERIFIED</span>` : `<span class="badge-pending">PENDING</span>`}</td>
-      <td>&#8377;${j.stipend.toLocaleString("en-IN")}</td>
+      <td>${j.status === "Verified" ? `<span class="badge-verified">VERIFIED</span>` : `<span class="badge-pending">${esc(j.status || "PENDING").toUpperCase()}</span>`}</td>
+      <td>
+        ${j.status !== "Verified" ? `<button class="mini-btn mini-green" data-iid="${j.id}" data-newstatus="Verified">Verify</button>` : ""}
+        ${j.status !== "Suspended" ? `<button class="mini-btn mini-red" data-iid="${j.id}" data-newstatus="Suspended">Suspend</button>`
+          : `<button class="mini-btn mini-navy" data-iid="${j.id}" data-newstatus="Pending">Restore</button>`}
+      </td>
     </tr>`).join("");
+  document.querySelectorAll("#listings-tbody [data-iid]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await api(`/api/admin/internships/${b.dataset.iid}/status`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: b.dataset.newstatus }),
+      });
+      loadListings();
+    }));
 }
 $("#listings-search").addEventListener("input", () => { listingsPage = 1; loadListings(); });
 $("#listings-prev").addEventListener("click", () => { listingsPage--; loadListings(); });
@@ -665,157 +1033,34 @@ $("#add-job-form").addEventListener("submit", async (e) => {
       verified: $("#j-verified").checked,
     }),
   });
-  $("#job-saved").textContent = "Internship added. Run the allocation engine to include it.";
+  $("#job-saved").textContent = "Internship added.";
   setTimeout(() => { $("#job-saved").textContent = ""; }, 4000);
   $("#add-job-form").reset();
   loadListings(); loadAdminStats();
 });
 
-/* ================= profile intake assistant ================= */
-$("#mode-form").addEventListener("click", () => setProfileMode("form"));
-$("#mode-chat").addEventListener("click", () => setProfileMode("chat"));
-function setProfileMode(mode) {
-  $("#mode-form").classList.toggle("active", mode === "form");
-  $("#mode-chat").classList.toggle("active", mode === "chat");
-  $("#profile-form-card").style.display = mode === "form" ? "block" : "none";
-  $("#profile-chat-card").style.display = mode === "chat" ? "block" : "none";
-  if (mode === "chat") startIntake();
+async function loadAdminComplaints() {
+  const rows = await api("/api/admin/complaints");
+  $("#admin-complaints-tbody").innerHTML = rows.length ? rows.map((c) => `
+    <tr>
+      <td class="td-strong">${esc(c.student_name)}</td>
+      <td>${esc(c.subject)}</td>
+      <td class="td-muted" style="max-width:280px">${esc(c.details)}</td>
+      <td>${c.status === "Open" ? `<span class="st-badge st-shortlisted">OPEN</span>` : `<span class="badge-verified">RESOLVED</span>`}</td>
+      <td>${c.status === "Open" ? `<button class="mini-btn mini-green" data-cmpid="${c.id}">Resolve</button>` : ""}</td>
+    </tr>`).join("")
+    : `<tr><td colspan="5" class="td-muted">No grievances submitted.</td></tr>`;
+  document.querySelectorAll("#admin-complaints-tbody [data-cmpid]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await api(`/api/admin/complaints/${b.dataset.cmpid}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Resolved" }),
+      });
+      loadAdminComplaints();
+    }));
 }
-
-const QUAL_OPTIONS = ["12th Pass", "Diploma", "BA", "BCom", "BSc", "BBA", "BPharm",
-  "BTech CSE", "BTech Mechanical", "BTech Electrical", "MBA", "MTech", "MSc"];
-const QUAL_LEVEL = (q) => q === "12th Pass" ? 1 : q === "Diploma" ? 2
-  : ["MBA", "MTech", "MSc"].includes(q) ? 4 : 3;
-
-let intake = null;
-
-const INTAKE_STEPS = [
-  {
-    key: "qualification",
-    ask: (s) => `What is your highest qualification?`,
-    options: () => QUAL_OPTIONS,
-    parse: (v) => {
-      const match = QUAL_OPTIONS.find((q) => q.toLowerCase() === v.trim().toLowerCase());
-      return match || null;
-    },
-    error: "Please pick one of the listed qualifications (tap a button below).",
-  },
-  {
-    key: "skills",
-    ask: () => "Great. Now tell me your skills, separated by commas. For example: Python, SQL, Excel",
-    options: () => [],
-    parse: (v) => {
-      const list = v.split(",").map((x) => x.trim()).filter(Boolean);
-      return list.length ? list : null;
-    },
-    error: "Please list at least one skill, separated by commas.",
-  },
-  {
-    key: "locations",
-    ask: () => "Which cities would you prefer to work in? Separate with commas, or say Any if you are open to relocating anywhere.",
-    options: () => ["Any"],
-    parse: (v) => {
-      const list = v.split(",").map((x) => x.trim()).filter(Boolean);
-      return list.length ? list : null;
-    },
-    error: "Please name at least one city, or tap Any.",
-  },
-  {
-    key: "sectors",
-    ask: () => "Which sector interests you the most? You can tap one or type more than one, separated by commas.",
-    options: () => SECTOR_LIST,
-    parse: (v) => {
-      const list = v.split(",").map((x) => x.trim()).filter(Boolean);
-      return list.length ? list : null;
-    },
-    error: "Please choose at least one sector.",
-  },
-  {
-    key: "first_generation",
-    ask: () => "Are you the first person in your family to attend college? This helps the scheme's fairness policy work for you; it never reduces your score.",
-    options: () => ["Yes", "No"],
-    parse: (v) => /^y/i.test(v.trim()) ? true : /^n/i.test(v.trim()) ? false : null,
-    error: "Please answer Yes or No.",
-  },
-  {
-    key: "college_tier",
-    ask: () => "Which tier is your college? Tier 1 (IIT/NIT/top university), Tier 2 (state university), or Tier 3 (local college). If unsure, pick Tier 3.",
-    options: () => ["Tier 1", "Tier 2", "Tier 3"],
-    parse: (v) => { const m = v.match(/[123]/); return m ? Number(m[0]) : null; },
-    error: "Please pick Tier 1, 2 or 3.",
-  },
-];
-
-function startIntake() {
-  if (!currentStudent) return;
-  intake = { step: 0, answers: {} };
-  $("#intake-messages").innerHTML = "";
-  intakeMsg("bot", `Namaste ${currentStudent.name.split(" ")[0]}! I will set up your profile in a few quick questions. You can tap an option or type your answer.`);
-  askCurrent();
-}
-function intakeMsg(who, text) {
-  const div = document.createElement("div");
-  div.className = "chat-msg " + (who === "user" ? "chat-user" : "chat-bot");
-  div.textContent = text;
-  $("#intake-messages").appendChild(div);
-  $("#intake-messages").scrollTop = $("#intake-messages").scrollHeight;
-}
-async function askCurrent() {
-  const step = INTAKE_STEPS[intake.step];
-  const typing = showTyping($("#intake-messages"));
-  await new Promise((r) => setTimeout(r, 550));
-  typing.remove();
-  intakeMsg("bot", step.ask(currentStudent));
-  $("#intake-quick").innerHTML = step.options().map((o) =>
-    `<button class="quick-btn">${esc(o)}</button>`).join("");
-  document.querySelectorAll("#intake-quick .quick-btn").forEach((b) =>
-    b.addEventListener("click", () => handleIntake(b.textContent)));
-}
-async function handleIntake(value) {
-  const step = INTAKE_STEPS[intake.step];
-  intakeMsg("user", value);
-  const parsed = step.parse(value);
-  if (parsed === null) { intakeMsg("bot", step.error); return; }
-  intake.answers[step.key] = parsed;
-  intake.step += 1;
-  if (intake.step < INTAKE_STEPS.length) { askCurrent(); return; }
-
-  // all answers collected: save to the database
-  $("#intake-quick").innerHTML = "";
-  const a = intake.answers;
-  await api(`/api/students/${currentStudent.id}`, {
-    method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      skills: a.skills,
-      qualification: a.qualification,
-      qualification_level: QUAL_LEVEL(a.qualification),
-      preferred_locations: a.locations,
-      preferred_sectors: a.sectors,
-      first_generation: a.first_generation,
-      college_tier: a.college_tier,
-    }),
-  });
-  intakeMsg("bot", `All set! Your profile is saved: ${a.qualification}, skills ${a.skills.join(", ")}, preferred ${a.locations.join(", ")} in ${a.sectors.join(", ")}. Your recommendations have been refreshed; open the Dashboard to see them.`);
-  $("#intake-quick").innerHTML =
-    `<button class="quick-btn q-green" id="intake-goto-dash">See my recommendations &rarr;</button>`;
-  $("#intake-goto-dash").addEventListener("click", () => switchTab("student", "dashboard"));
-  await selectStudent(currentStudent.id);
-}
-$("#intake-send").addEventListener("click", () => {
-  const v = $("#intake-input").value.trim();
-  if (v && intake) { $("#intake-input").value = ""; handleIntake(v); }
-});
-$("#intake-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); $("#intake-send").click(); }
-});
 
 /* ================= chatbot ================= */
-$("#chat-fab").addEventListener("click", () => {
-  $("#chat-panel").classList.toggle("show");
-  if (!$("#chat-messages").children.length) addChatMsg("bot",
-    "Namaste! I am the ATLAS assistant. Ask me about internships (for example 'Python internships in Pune'), stipend, eligibility, or how matching works.");
-});
-$("#chat-close").addEventListener("click", () => $("#chat-panel").classList.remove("show"));
 function addChatMsg(who, text) {
   const div = document.createElement("div");
   div.className = "chat-msg " + (who === "user" ? "chat-user" : "chat-bot");
@@ -823,14 +1068,15 @@ function addChatMsg(who, text) {
   $("#chat-messages").appendChild(div);
   $("#chat-messages").scrollTop = $("#chat-messages").scrollHeight;
 }
-function showTyping(container) {
-  const div = document.createElement("div");
-  div.className = "chat-msg chat-bot typing-bubble";
-  div.innerHTML = `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-  return div;
+function openAssistant() {
+  $("#chat-panel").classList.add("show");
+  if (!$("#chat-messages").children.length) addChatMsg("bot",
+    "Namaste! I am the ATLAS assistant. Try 'recommend jobs for me', 'my application status', or ask about stipend and eligibility.");
 }
+$("#chat-fab").addEventListener("click", openAssistant);
+$("#side-assistant").addEventListener("click", openAssistant);
+$("#qa-assistant").addEventListener("click", openAssistant);
+$("#chat-close").addEventListener("click", () => $("#chat-panel").classList.remove("show"));
 async function sendChat() {
   const msg = $("#chat-input").value.trim();
   if (!msg) return;
@@ -838,14 +1084,10 @@ async function sendChat() {
   $("#chat-input").value = "";
   const typing = showTyping($("#chat-messages"));
   const started = Date.now();
-  const headers = { "Content-Type": "application/json" };
-  if (authToken) headers.Authorization = "Bearer " + authToken;
   const res = await api("/api/chat", {
-    method: "POST", headers,
-    body: JSON.stringify({ message: msg,
-      student_id: currentStudent ? currentStudent.id : null }),
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: msg }),
   });
-  // keep the typing dots visible briefly so the reply feels composed
   const minTyping = 650;
   if (Date.now() - started < minTyping)
     await new Promise((r) => setTimeout(r, minTyping - (Date.now() - started)));
@@ -855,25 +1097,17 @@ async function sendChat() {
 $("#chat-send").addEventListener("click", sendChat);
 $("#chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
 
-/* ================= topbar + sidebar extras ================= */
+/* ================= topbar ================= */
 $("#hamburger").addEventListener("click", () =>
   document.querySelector(".app-shell").classList.toggle("collapsed"));
 $("#top-search").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
+  if (e.key === "Enter" && currentRole === "student") {
     $("#explore-search").value = e.target.value;
-    switchTab("student", "explore");
+    switchTab("explore");
     explorePage = 1;
     loadExplore();
   }
 });
-function openAssistant() {
-  $("#chat-panel").classList.add("show");
-  if (!$("#chat-messages").children.length) addChatMsg("bot",
-    "Namaste! I am the ATLAS assistant. Try 'recommend jobs for me', 'my application status', or ask about stipend and eligibility.");
-}
-$("#side-assistant").addEventListener("click", openAssistant);
-$("#qa-assistant").addEventListener("click", openAssistant);
-$("#side-bell").addEventListener("click", () => switchTab("student", "dashboard"));
 
 async function loadImpact() {
   try {
@@ -886,7 +1120,7 @@ async function loadImpact() {
   }
 }
 
-/* ================= sectors dropdown + init ================= */
+/* ================= init ================= */
 const SECTOR_LIST = ["IT & Software", "Banking & Finance", "Manufacturing",
   "Energy", "Healthcare & Pharma", "Retail & FMCG"];
 $("#rec-sector").innerHTML += SECTOR_LIST.map((s) => `<option>${s}</option>`).join("");

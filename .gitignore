@@ -4,3 +4,4 @@ atlas.db
 .venv/
 venv/
 .env
+uploads/

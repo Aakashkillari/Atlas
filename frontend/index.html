@@ -53,11 +53,18 @@
       <button class="side-item nav-tab" data-tab="applications"><svg class="ico"><use href="#i-clipboard"/></svg><span data-i18n="myApplications">Applications</span></button>
       <button class="side-item nav-tab" data-tab="dashboard" data-scroll="rec-section"><svg class="ico"><use href="#i-spark"/></svg><span data-i18n="aiRecs">AI Recommendations</span></button>
       <button class="side-item" id="side-assistant"><svg class="ico"><use href="#i-bot"/></svg><span data-i18n="aiAssistant">AI Assistant</span></button>
-      <button class="side-item nav-tab" data-tab="coming"><svg class="ico"><use href="#i-mail"/></svg><span data-i18n="messages">Messages</span><span class="side-badge">3</span></button>
-      <button class="side-item nav-tab" data-tab="coming"><svg class="ico"><use href="#i-file"/></svg><span data-i18n="documents">Documents</span></button>
-      <button class="side-item nav-tab" data-tab="coming"><svg class="ico"><use href="#i-chart"/></svg><span data-i18n="skillAnalytics">Skill Analytics</span></button>
-      <button class="side-item nav-tab" data-tab="coming"><svg class="ico"><use href="#i-help"/></svg><span data-i18n="helpSupport">Help &amp; Support</span></button>
+      <button class="side-item nav-tab" data-tab="messages"><svg class="ico"><use href="#i-mail"/></svg><span data-i18n="messages">Messages</span><span class="side-badge" id="msg-badge" style="display:none">0</span></button>
+      <button class="side-item nav-tab" data-tab="documents"><svg class="ico"><use href="#i-file"/></svg><span data-i18n="documents">Documents</span></button>
+      <button class="side-item nav-tab" data-tab="skills"><svg class="ico"><use href="#i-chart"/></svg><span data-i18n="skillAnalytics">Skill Analytics</span></button>
+      <button class="side-item nav-tab" data-tab="help"><svg class="ico"><use href="#i-help"/></svg><span data-i18n="helpSupport">Help &amp; Support</span></button>
       <button class="side-item" id="btn-admin-portal"><svg class="ico"><use href="#i-gear"/></svg><span data-i18n="adminConsole">Admin Console</span></button>
+    </nav>
+
+    <nav id="nav-company" class="side-nav nav-set" style="display:none">
+      <button class="side-item nav-tab active" data-tab="c-dash"><svg class="ico"><use href="#i-home"/></svg><span data-i18n="dashboard">Dashboard</span></button>
+      <button class="side-item nav-tab" data-tab="c-post"><svg class="ico"><use href="#i-briefcase"/></svg><span data-i18n="postInternship">Post Internship</span></button>
+      <button class="side-item nav-tab" data-tab="c-applicants"><svg class="ico"><use href="#i-clipboard"/></svg><span data-i18n="applicants">Applicants</span></button>
+      <button class="side-item nav-tab" data-tab="messages"><svg class="ico"><use href="#i-mail"/></svg><span data-i18n="messages">Messages</span><span class="side-badge" id="msg-badge-c" style="display:none">0</span></button>
     </nav>
 
     <div class="side-promo">
@@ -86,9 +93,8 @@
         <div class="user-chip">
           <div class="avatar" id="avatar-circle">A</div>
           <div class="user-meta">
-            <select id="student-select" class="student-select"></select>
-            <span id="student-name" class="student-name" style="display:none"></span>
-            <span class="user-role" data-i18n="studentRole">Student</span>
+            <span id="student-name" class="student-name"></span>
+            <span class="user-role" id="user-role-label" data-i18n="studentRole">Student</span>
           </div>
           <button id="logout-btn" class="link-btn" style="display:none" data-i18n="signOut">Sign out</button>
         </div>
@@ -300,6 +306,129 @@
         </div>
       </section>
 
+      <!-- ================= STUDENT/COMPANY: MESSAGES ================= -->
+      <section id="tab-messages" class="tab-view">
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="messages">Messages</h2>
+            <button id="mark-read" class="link-btn" data-i18n="markRead">Mark all as read</button></div>
+          <div id="notif-list"></div>
+        </div>
+      </section>
+
+      <!-- ================= STUDENT: DOCUMENTS ================= -->
+      <section id="tab-documents" class="tab-view">
+        <div class="panel">
+          <div class="panel-head">
+            <div><h2 data-i18n="documents">Documents</h2>
+              <p class="sub-line" data-i18n="docsSub">Upload your resume (PDF, max 5 MB). Companies and the admin can view it with your applications.</p></div>
+          </div>
+          <div class="upload-row">
+            <input id="resume-file" type="file" accept="application/pdf">
+            <button id="resume-upload" class="btn btn-saffron" data-i18n="upload">Upload</button>
+            <span id="upload-note" class="saved-note"></span>
+          </div>
+          <div id="parsed-skills-box" style="display:none" class="cold-note"></div>
+          <div id="docs-list"></div>
+        </div>
+      </section>
+
+      <!-- ================= STUDENT: SKILL ANALYTICS ================= -->
+      <section id="tab-skills" class="tab-view">
+        <div class="panel">
+          <div class="panel-head">
+            <div><h2 data-i18n="skillAnalytics">Skill Analytics</h2>
+              <p class="sub-line" data-i18n="skillsSub">Your skills measured against demand across every live internship listing.</p></div>
+          </div>
+          <div id="skills-body"></div>
+        </div>
+      </section>
+
+      <!-- ================= STUDENT: HELP & SUPPORT ================= -->
+      <section id="tab-help" class="tab-view">
+        <div class="dash-grid">
+          <div class="dash-main">
+            <div class="panel">
+              <div class="panel-head"><h2 data-i18n="faqTitle">Frequently Asked Questions</h2>
+                <button class="btn btn-navy" id="help-chat" data-i18n="askAssistant">Ask the Assistant</button></div>
+              <div id="faq-list" class="faq-list"></div>
+            </div>
+          </div>
+          <aside class="dash-side">
+            <div class="panel">
+              <h2 data-i18n="grievanceTitle">Raise a Grievance</h2>
+              <p class="sub-line" data-i18n="grievanceSub">Your complaint goes directly to the scheme administrators.</p>
+              <form id="complaint-form" class="auth-form">
+                <label><span data-i18n="subject">Subject</span><input id="cmp-subject" required placeholder="Subject"></label>
+                <label><span data-i18n="details">Details</span><textarea id="cmp-details" required rows="4" placeholder="Describe the issue" style="padding:10px 12px; border:1px solid var(--border); border-radius:10px; font-family:inherit; font-size:0.85rem"></textarea></label>
+                <button type="submit" class="btn btn-saffron" data-i18n="submitGrievance">Submit Grievance</button>
+                <span id="cmp-note" class="saved-note"></span>
+              </form>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ================= COMPANY: DASHBOARD ================= -->
+      <section id="tab-c-dash" class="tab-view">
+        <div class="hero">
+          <div class="hero-text">
+            <h1><span data-i18n="welcome">Welcome</span>, <span id="c-hero-name">Company</span></h1>
+            <p data-i18n="cHeroSub">Manage your PM Internship Scheme postings and applicants.</p>
+          </div>
+          <div class="hero-art"><div class="chakra-hero"></div></div>
+        </div>
+        <div class="stat-cards" id="c-stats" style="margin-top:18px"></div>
+        <div class="panel" style="margin-top:18px">
+          <div class="panel-head"><h2 data-i18n="yourListings">Your Listings</h2></div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th data-i18n="thPosting">Posting</th><th data-i18n="thLocation">Location</th>
+                <th data-i18n="thCapacity">Capacity</th><th data-i18n="thStatus">Status</th></tr></thead>
+              <tbody id="c-listings-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= COMPANY: POST ================= -->
+      <section id="tab-c-post" class="tab-view">
+        <div class="panel">
+          <div class="panel-head">
+            <div><h2 data-i18n="postInternship">Post Internship</h2>
+              <p class="sub-line" data-i18n="postSub">New listings are reviewed by the scheme administrator before receiving the Verified badge.</p></div>
+          </div>
+          <form id="c-post-form" class="profile-grid">
+            <label><span data-i18n="jTitle">Role title</span><input id="cp-title" required placeholder="Data Analyst Intern"></label>
+            <label><span data-i18n="jLocation">City</span><input id="cp-location" required placeholder="Pune"></label>
+            <label><span data-i18n="jState">State</span><input id="cp-state" placeholder="Maharashtra"></label>
+            <label><span data-i18n="jSkills">Required skills (comma separated)</span><input id="cp-skills" required placeholder="Python, SQL"></label>
+            <label><span data-i18n="jMinQual">Minimum qualification</span>
+              <select id="cp-minqual"><option value="1">12th Pass</option><option value="2">Diploma</option><option value="3">Graduate</option><option value="4">Postgraduate</option></select></label>
+            <label><span data-i18n="jCapacity">Capacity (seats)</span><input id="cp-capacity" type="number" value="5"></label>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-green" data-i18n="publishListing">Publish Listing</button>
+              <span id="cp-note" class="saved-note"></span>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ================= COMPANY: APPLICANTS ================= -->
+      <section id="tab-c-applicants" class="tab-view">
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="applicants">Applicants</h2></div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th data-i18n="thStudent">Student</th><th data-i18n="thRole">Role</th>
+                <th data-i18n="thSkills">Skills</th><th data-i18n="thScore">Match</th>
+                <th data-i18n="thResume">Resume</th><th data-i18n="thStatus">Status</th>
+                <th data-i18n="thActions">Actions</th></tr></thead>
+              <tbody id="c-apps-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- ================= COMING SOON ================= -->
       <section id="tab-coming" class="tab-view">
         <div class="panel coming-panel">
@@ -314,8 +443,10 @@
         <div id="nav-admin" class="nav-set admin-pills">
           <button class="pill nav-tab active" data-tab="overview" data-i18n="overview">Overview</button>
           <button class="pill nav-tab" data-tab="admin-students" data-i18n="students">Students</button>
+          <button class="pill nav-tab" data-tab="admin-companies" data-i18n="companiesTab">Companies</button>
           <button class="pill nav-tab" data-tab="admin-apps" data-i18n="applications">Applications</button>
           <button class="pill nav-tab" data-tab="listings" data-i18n="listings">Listings</button>
+          <button class="pill nav-tab" data-tab="admin-complaints" data-i18n="complaints">Complaints</button>
         </div>
         <div class="panel">
           <div class="panel-head">
@@ -331,6 +462,12 @@
               <h2 data-i18n="funnelTitle">Conversion Funnel (National, 2025 data)</h2>
               <div id="funnel" class="funnel"></div>
               <div class="warn-note" data-i18n="funnelWarn">Only 11.2% of postings convert to a joined intern. That conversion is the primary target of the allocation engine.</div>
+            </div>
+            <div class="panel">
+              <h2><span data-i18n="insightsTitle">National Insights: State-wise PMIS Funnel</span>
+                <span id="insights-badge" class="live-badge" style="display:none">LIVE &middot; data.gov.in</span></h2>
+              <p class="sub-line" data-i18n="insightsSub">Profiles, opportunities, offers and acceptances merged from four Government of India open datasets.</p>
+              <div id="insights-body"></div>
             </div>
             <div class="panel">
               <h2><span data-i18n="liveTitle">Live Government Data: Accepted Offers by State</span>
@@ -378,6 +515,34 @@
             <button id="students-prev" class="page-btn">&larr;</button>
             <span id="students-pages" class="page-nums"></span>
             <button id="students-next" class="page-btn">&rarr;</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-admin-companies" class="tab-view">
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="companiesTitle">Partner Companies</h2></div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th data-i18n="thCompany">Company</th><th data-i18n="thSector">Sector</th>
+                <th data-i18n="thListings">Listings</th><th data-i18n="thStatus">Status</th>
+                <th data-i18n="thActions">Actions</th></tr></thead>
+              <tbody id="admin-companies-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-admin-complaints" class="tab-view">
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="complaintsTitle">Grievances</h2></div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th data-i18n="thStudent">Student</th><th data-i18n="subject">Subject</th>
+                <th data-i18n="details">Details</th><th data-i18n="thStatus">Status</th>
+                <th data-i18n="thActions">Actions</th></tr></thead>
+              <tbody id="admin-complaints-tbody"></tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -434,7 +599,7 @@
             <table class="data-table">
               <thead><tr><th data-i18n="thPosting">Posting</th><th data-i18n="thEmployer">Employer</th>
                 <th data-i18n="thLocation">Location</th><th data-i18n="thCapacity">Capacity</th>
-                <th data-i18n="thVerification">Verification</th><th data-i18n="thStipend">Stipend</th></tr></thead>
+                <th data-i18n="thVerification">Verification</th><th data-i18n="thActions">Actions</th></tr></thead>
               <tbody id="listings-tbody"></tbody>
             </table>
           </div>
@@ -460,11 +625,21 @@
 <!-- auth modal -->
 <div id="auth-backdrop" class="modal-backdrop">
   <div class="modal auth-modal">
+    <div class="mode-toggle" style="margin-bottom:14px">
+      <button id="auth-role-student" class="ptoggle active" data-i18n="studentRole">Student</button>
+      <button id="auth-role-company" class="ptoggle" data-i18n="companyRole">Company</button>
+    </div>
     <h3 id="auth-title" data-i18n="signIn">Student Sign In</h3>
-    <p class="sub-line" data-i18n="authSub">Sign in to your ATLAS account, create a new one, or continue with a demo profile.</p>
+    <p class="sub-line" data-i18n="authSub">Sign in to your ATLAS account or create a new one.</p>
     <form id="auth-form" class="auth-form">
       <label id="auth-name-row" style="display:none"><span data-i18n="fullName">Full name</span>
         <input id="auth-name" type="text" autocomplete="name" placeholder="Ananya Sharma"></label>
+      <label id="auth-company-row" style="display:none"><span data-i18n="companyName">Company name</span>
+        <input id="auth-company" type="text" placeholder="Tata Consultancy Services"></label>
+      <label id="auth-sector-row" style="display:none"><span data-i18n="jSector">Sector</span>
+        <select id="auth-sector"><option>IT &amp; Software</option><option>Banking &amp; Finance</option>
+          <option>Manufacturing</option><option>Energy</option>
+          <option>Healthcare &amp; Pharma</option><option>Retail &amp; FMCG</option></select></label>
       <label><span>Email</span>
         <input id="auth-email" type="email" required autocomplete="email" placeholder="you@example.in"></label>
       <label><span data-i18n="password">Password</span>
@@ -474,7 +649,6 @@
     </form>
     <div class="auth-alt">
       <button id="auth-mode-toggle" class="link-btn" data-i18n="createAccount">New here? Create an account</button>
-      <button id="auth-demo" class="link-btn" data-i18n="demoMode">Continue as demo student &rarr;</button>
     </div>
   </div>
 </div>
