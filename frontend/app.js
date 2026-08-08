@@ -48,7 +48,8 @@ function switchTab(tab) {
   if (tab === "help") renderFaq();
   if (tab === "c-dash") loadCompanyDash();
   if (tab === "c-applicants") loadCompanyApplicants();
-  if (tab === "overview") { loadAdminStats(); loadFairness(); loadInsights(); loadLivePmis(); }
+  if (tab === "live") { loadInsights(); loadLivePmis(); }
+  if (tab === "overview") { loadAdminStats(); loadFairness(); }
   if (tab === "admin-students") loadAdminStudents();
   if (tab === "admin-companies") loadAdminCompanies();
   if (tab === "admin-apps") loadAdminApps();
@@ -79,6 +80,9 @@ function showAuth() { $("#auth-backdrop").classList.add("show"); }
 function hideAuth() { $("#auth-backdrop").classList.remove("show"); }
 
 function renderAuth() {
+  const signupStudent = authMode === "signup" && authRole === "student";
+  $("#auth-mobile-row").style.display = signupStudent ? "flex" : "none";
+  $("#auth-mobile").required = signupStudent;
   if (PATH_ROLE === "admin") {
     // admin URL: fixed-credential sign-in only
     $("#auth-role-student").parentElement.style.display = "none";
@@ -128,7 +132,8 @@ $("#auth-form").addEventListener("submit", async (e) => {
       res = await api("/api/auth/signup", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: $("#auth-name").value,
-          email: $("#auth-email").value, password: $("#auth-password").value }),
+          email: $("#auth-email").value, password: $("#auth-password").value,
+          mobile: $("#auth-mobile").value }),
       });
     } else {
       res = await api("/api/auth/login", {
@@ -566,14 +571,13 @@ const INTAKE_STEPS = [
     parse: (v) => { const m = v.match(/[123]/); return m ? Number(m[0]) : null; },
     error: "Please pick Tier 1, 2 or 3." },
   { key: "mobile",
-    ask: () => "Finally, would you like to share your mobile number? Companies can use it to contact you about offers. Type it, or tap Skip.",
-    options: () => ["Skip"],
+    ask: () => "Finally, your mobile number (required). Companies use it to contact you about offers.",
+    options: () => [],
     parse: (v) => {
-      if (/^skip$/i.test(v.trim())) return "";
       const digits = v.replace(/[^\d+]/g, "");
       return /^(\+91)?[6-9]\d{9}$/.test(digits) ? digits : null;
     },
-    error: "That does not look like a valid 10-digit Indian mobile number. Try again or tap Skip." },
+    error: "That does not look like a valid 10-digit Indian mobile number. Please try again." },
 ];
 
 function startIntake() {
@@ -626,7 +630,7 @@ async function handleIntake(value) {
       qualification_level: QUAL_LEVEL(a.qualification),
       preferred_locations: a.locations, preferred_sectors: a.sectors,
       first_generation: a.first_generation, college_tier: a.college_tier,
-      mobile: a.mobile || "",
+      mobile: a.mobile,
     }),
   });
   intakeMsg("bot", `All set! Your profile is saved: ${a.qualification}, skills ${a.skills.join(", ")}. Your recommendations are ready on the Dashboard.`);
@@ -1187,16 +1191,10 @@ $("#top-search").addEventListener("keydown", (e) => {
   }
 });
 
-async function loadImpact() {
-  try {
-    const data = await api("/api/live/pmis");
-    $("#impact-students").textContent = data.total_accepted.toLocaleString("en-IN") + "+";
-    $("#impact-states").textContent = data.records.length + "/36";
-  } catch {
-    $("#impact-students").textContent = "28,141+";
-    $("#impact-states").textContent = "35/36";
-  }
-}
+/* Live Data dashboard entry points */
+$("#live-data-btn").addEventListener("click", () => switchTab("live"));
+$("#impact-live-btn").addEventListener("click", () => switchTab("live"));
+$("#live-refresh").addEventListener("click", () => { loadInsights(); loadLivePmis(); });
 
 /* ================= init ================= */
 const SECTOR_LIST = ["IT & Software", "Banking & Finance", "Manufacturing",
@@ -1204,5 +1202,4 @@ const SECTOR_LIST = ["IT & Software", "Banking & Finance", "Manufacturing",
 $("#rec-sector").innerHTML += SECTOR_LIST.map((s) => `<option>${s}</option>`).join("");
 
 renderFunnel();
-loadImpact();
 initSession();

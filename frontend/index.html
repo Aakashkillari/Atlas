@@ -89,6 +89,7 @@
           <button id="lang-hi" class="lang-btn">हि</button>
           <button id="lang-ta" class="lang-btn">த</button>
         </div>
+        <button class="btn btn-navy" id="live-data-btn" style="padding:8px 14px; font-size:0.78rem"><span data-i18n="liveData">Live Data</span></button>
         <button class="bell" id="side-bell" aria-label="Notifications"><svg class="ico"><use href="#i-bell"/></svg><span class="bell-dot" style="display:none"></span></button>
         <div class="user-chip">
           <div class="avatar" id="avatar-circle">A</div>
@@ -208,11 +209,11 @@
             <div class="panel">
               <h2 data-i18n="nationalImpact">National Impact</h2>
               <div id="impact-body">
-                <div class="impact-row"><span class="ann-ico ico-green"><svg class="ico"><use href="#i-cap"/></svg></span><div><strong id="impact-students">--</strong><br><span class="impact-label" data-i18n="acceptedOffers">Accepted offers (live)</span></div></div>
                 <div class="impact-row"><span class="ann-ico ico-saffron"><svg class="ico"><use href="#i-briefcase"/></svg></span><div><strong>1.27L+</strong><br><span class="impact-label" data-i18n="oppsPosted">Internships posted</span></div></div>
                 <div class="impact-row"><span class="ann-ico ico-blue"><svg class="ico"><use href="#i-building"/></svg></span><div><strong>500</strong><br><span class="impact-label" data-i18n="companies">Top companies</span></div></div>
-                <div class="impact-row"><span class="ann-ico ico-purple"><svg class="ico"><use href="#i-pin"/></svg></span><div><strong id="impact-states">--</strong><br><span class="impact-label" data-i18n="statesCovered">States covered (live)</span></div></div>
+                <div class="impact-row"><span class="ann-ico ico-purple"><svg class="ico"><use href="#i-pin"/></svg></span><div><strong>36</strong><br><span class="impact-label" data-i18n="statesCovered">States and UTs</span></div></div>
               </div>
+              <button class="btn btn-navy" id="impact-live-btn" style="width:100%; margin-top:14px" data-i18n="viewLiveData">View Live Government Data</button>
               <div class="mission-quote">
                 <span data-i18n="mission">"Empowering every student with equal opportunities, across every corner of India."</span>
                 <div class="mission-by">ATLAS Mission</div>
@@ -293,8 +294,8 @@
                 <input id="f-locations" type="text" placeholder="Pune, Mumbai"></label>
               <label><span data-i18n="fSectors">Preferred sectors (comma separated)</span>
                 <input id="f-sectors" type="text" placeholder="IT & Software"></label>
-              <label><span data-i18n="fMobile">Mobile number (optional)</span>
-                <input id="f-mobile" type="tel" placeholder="9876543210" maxlength="13"></label>
+              <label><span data-i18n="fMobile">Mobile number</span>
+                <input id="f-mobile" type="tel" required placeholder="9876543210" maxlength="13"></label>
               <label><span data-i18n="fTier">College tier</span>
                 <select id="f-tier"><option value="1">Tier 1</option><option value="2">Tier 2</option><option value="3">Tier 3</option></select></label>
               <label class="check-label"><input id="f-firstgen" type="checkbox">
@@ -433,6 +434,26 @@
         </div>
       </section>
 
+      <!-- ================= LIVE DATA (all roles) ================= -->
+      <section id="tab-live" class="tab-view">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2><span data-i18n="liveDashTitle">PM Internship Scheme: Live Government Data</span>
+                <span id="insights-badge" class="live-badge" style="display:none">LIVE &middot; data.gov.in</span></h2>
+              <p class="sub-line" data-i18n="liveDashSub">Fetched directly from the Open Government Data Platform of India (data.gov.in), sourced from Parliament replies. Refreshed every few hours.</p>
+            </div>
+            <button id="live-refresh" class="btn btn-saffron" data-i18n="refresh">Refresh</button>
+          </div>
+          <div id="insights-body"><p class="sub-line">Loading live government data...</p></div>
+        </div>
+        <div class="panel" style="margin-top:18px">
+          <h2><span data-i18n="liveTitle">Accepted Offers by State (Pilot Round-I)</span>
+            <span id="live-badge" class="live-badge" style="display:none">LIVE &middot; data.gov.in</span></h2>
+          <div id="live-pmis"></div>
+        </div>
+      </section>
+
       <!-- ================= COMING SOON ================= -->
       <section id="tab-coming" class="tab-view">
         <div class="panel coming-panel">
@@ -466,17 +487,6 @@
               <h2 data-i18n="funnelTitle">Conversion Funnel (National, 2025 data)</h2>
               <div id="funnel" class="funnel"></div>
               <div class="warn-note" data-i18n="funnelWarn">Only 11.2% of postings convert to a joined intern. That conversion is the primary target of the allocation engine.</div>
-            </div>
-            <div class="panel">
-              <h2><span data-i18n="insightsTitle">National Insights: State-wise PMIS Funnel</span>
-                <span id="insights-badge" class="live-badge" style="display:none">LIVE &middot; data.gov.in</span></h2>
-              <p class="sub-line" data-i18n="insightsSub">Profiles, opportunities, offers and acceptances merged from four Government of India open datasets.</p>
-              <div id="insights-body"></div>
-            </div>
-            <div class="panel">
-              <h2><span data-i18n="liveTitle">Live Government Data: Accepted Offers by State</span>
-                <span id="live-badge" class="live-badge" style="display:none">LIVE &middot; data.gov.in</span></h2>
-              <div id="live-pmis"></div>
             </div>
             <div class="panel">
               <h2 data-i18n="fairnessTitle">Fairness Monitor: Affirmative-Action Weighting</h2>
@@ -638,6 +648,8 @@
     <form id="auth-form" class="auth-form">
       <label id="auth-name-row" style="display:none"><span data-i18n="fullName">Full name</span>
         <input id="auth-name" type="text" autocomplete="name" placeholder="Ananya Sharma"></label>
+      <label id="auth-mobile-row" style="display:none"><span data-i18n="fMobile">Mobile number</span>
+        <input id="auth-mobile" type="tel" autocomplete="tel" placeholder="9876543210" maxlength="13"></label>
       <label id="auth-company-row" style="display:none"><span data-i18n="companyName">Company name</span>
         <input id="auth-company" type="text" placeholder="Tata Consultancy Services"></label>
       <label id="auth-sector-row" style="display:none"><span data-i18n="jSector">Sector</span>

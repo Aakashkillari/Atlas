@@ -39,12 +39,26 @@ def _email_taken(conn, email: str) -> bool:
     return bool(conn.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone())
 
 
-def signup(name: str, email: str, password: str) -> dict:
+import re as _re
+
+MOBILE_RE = r"(\+91)?[6-9]\d{9}"
+
+
+def clean_mobile(mobile: str) -> str:
+    """Normalise and validate a mandatory Indian mobile number."""
+    digits = _re.sub(r"[^\d+]", "", mobile or "")
+    if not _re.fullmatch(MOBILE_RE, digits):
+        raise ValueError("Please enter a valid 10-digit Indian mobile number.")
+    return digits
+
+
+def signup(name: str, email: str, password: str, mobile: str) -> dict:
     email = email.strip().lower()
     if len(password) < 6:
         raise ValueError("Password must be at least 6 characters.")
     if email == ADMIN_EMAIL:
         raise ValueError("This email is reserved.")
+    mobile = clean_mobile(mobile)
     with get_conn() as conn:
         if _email_taken(conn, email):
             raise ValueError("An account with this email already exists.")
@@ -52,10 +66,10 @@ def signup(name: str, email: str, password: str) -> dict:
             conn,
             "INSERT INTO students (name, email, qualification, qualification_level,"
             " skills, preferred_locations, preferred_sectors, home_state,"
-            " first_generation, college_tier, available_months)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " first_generation, college_tier, available_months, mobile)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (name.strip(), email, "12th Pass", 1, "[]", '["Any"]', "[]",
-             "", 0, 3, 12))
+             "", 0, 3, 12, mobile))
         _create_user(conn, email, password, "student", student_id=student_id)
     return login(email, password)
 

@@ -69,6 +69,7 @@ class SignupBody(BaseModel):
     name: str
     email: str
     password: str
+    mobile: str
 
 
 class CompanySignupBody(BaseModel):
@@ -86,7 +87,7 @@ class LoginBody(BaseModel):
 @app.post("/api/auth/signup")
 def auth_signup(item: SignupBody):
     try:
-        return auth.signup(item.name, item.email, item.password)
+        return auth.signup(item.name, item.email, item.password, item.mobile)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -158,9 +159,10 @@ def update_student(student_id: int, item: ProfileUpdate,
     p = principal(authorization)
     if not p or p["role"] != "student" or p["student"]["id"] != student_id:
         raise HTTPException(403, "You can only edit your own profile.")
-    mobile = re.sub(r"[^\d+]", "", item.mobile or "")
-    if mobile and not re.fullmatch(r"(\+91)?[6-9]\d{9}", mobile):
-        raise HTTPException(400, "Please enter a valid 10-digit Indian mobile number.")
+    try:
+        mobile = auth.clean_mobile(item.mobile)  # mandatory for students
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     with get_conn() as conn:
         conn.execute(
             "UPDATE students SET skills=?, qualification=?, qualification_level=?,"
