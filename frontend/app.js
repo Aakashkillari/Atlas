@@ -216,10 +216,6 @@ async function initSession() {
   renderAuth();
   showAuth();
 }
-$("#btn-admin-portal").addEventListener("click", () => {
-  if (currentRole === "admin") { switchTab("overview"); return; }
-  location.href = "/admin";
-});
 $("#btn-student-portal").addEventListener("click", () => {});
 
 /* ================= student dashboard ================= */
