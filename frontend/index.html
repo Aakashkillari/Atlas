@@ -39,7 +39,9 @@
   <!-- ================= SIDEBAR ================= -->
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-logo">A</div>
+      <img src="/static/logo.png" alt="ATLAS logo" class="brand-img"
+           onerror="this.style.display='none'; document.getElementById('brand-fallback').style.display='flex'">
+      <div class="brand-logo" id="brand-fallback" style="display:none">A</div>
       <div>
         <div class="brand-name">ATLAS</div>
         <div class="brand-sub">AI-Driven Talent Linking<br>&amp; Allocation System</div>

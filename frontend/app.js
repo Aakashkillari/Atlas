@@ -5,7 +5,11 @@ const api = (path, opts = {}) => {
   if (authToken) headers.Authorization = "Bearer " + authToken;
   return fetch(path, { ...opts, headers }).then(async (r) => {
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : r.statusText);
+    if (!r.ok) {
+      const err = new Error(typeof data.detail === "string" ? data.detail : r.statusText);
+      err.status = r.status;
+      throw err;
+    }
     return data;
   });
 };
@@ -183,7 +187,8 @@ async function initSession() {
   // migrate a session stored under the old single-token key
   const legacy = localStorage.getItem("atlas_token");
   if (!authToken && legacy) { authToken = legacy; localStorage.removeItem("atlas_token"); }
-  if (authToken) {
+  // retry on server hiccups (cold starts, restarts); only a real 401 signs out
+  for (let attempt = 0; authToken; attempt++) {
     try {
       const p = await api("/api/auth/me");
       if (p.role !== PATH_ROLE) {
@@ -196,8 +201,16 @@ async function initSession() {
       localStorage.setItem(TOKEN_KEY, authToken);
       enterSession(p);
       return;
+    } catch (err) {
+      if (err.status === 401) {
+        authToken = "";
+        localStorage.removeItem(TOKEN_KEY);
+        break;
+      }
+      if (attempt >= 15) break;  // ~45s: give up but KEEP the token for next visit
+      $("#student-name").textContent = "Reconnecting...";
+      await new Promise((r) => setTimeout(r, 3000));
     }
-    catch { authToken = ""; localStorage.removeItem(TOKEN_KEY); }
   }
   renderAuth();
   showAuth();
